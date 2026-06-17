@@ -68,6 +68,7 @@ export default defineSchema({
     blockedUserIds: v.optional(v.array(v.string())),
     settings: v.optional(settings),
     tokenVersion: v.optional(v.number()),
+    lastSeen: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

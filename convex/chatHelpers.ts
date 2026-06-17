@@ -193,6 +193,8 @@ export const createNotification = async (
   meta: any = {}
 ) => {
   if (!userId || userId === actorId) return null;
+  const recipient = await getUserByPublicId(ctx, userId);
+  if (recipient?.settings?.notifications === false) return null;
   const at = Date.now();
   await ctx.db.insert("notifications", {
     notificationId: makeId("notice"),

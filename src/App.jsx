@@ -119,6 +119,14 @@ const formatDay = (value) => {
   return date.toLocaleDateString([], { month: "short", day: "numeric", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
 };
 
+const displayError = (err, fallback = "Could not complete that action") => {
+  const raw = String(err?.message || fallback);
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const uncaught = lines.find((line) => line.includes("Uncaught Error:"));
+  const chosen = uncaught ? uncaught.replace(/^.*Uncaught Error:\s*/, "") : lines[0];
+  return (chosen || fallback).replace(/^Error:\s*/, "");
+};
+
 const sortMessages = (messages = []) =>
   [...messages].sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
 
@@ -154,6 +162,25 @@ function IconButton({ title, children, className = "", ...props }) {
       {children}
     </button>
   );
+}
+
+function useResolvedTheme(theme = "system") {
+  const getSystemTheme = () => {
+    if (typeof window === "undefined" || !window.matchMedia) return "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  };
+  const [systemTheme, setSystemTheme] = useState(getSystemTheme);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemTheme(query.matches ? "dark" : "light");
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  return theme === "system" ? systemTheme : theme;
 }
 
 function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
@@ -305,7 +332,7 @@ function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           )}
           {error && <p className="form-error">{error}</p>}
           <button className="primary-button" disabled={busy}>
-            {busy ? <><Loader2 size={17} className="spin" /> Working...</> : mode === "login" ? "Sign in" : "Create account"}
+            {busy ? <><Loader2 size={17} className="spin" /> {mode === "login" ? "Signing in..." : "Creating..."}</> : mode === "login" ? "Sign in" : "Create account"}
           </button>
           <p className="auth-switch-copy">
             {mode === "login" ? "Need an account?" : "Already have an account?"}{" "}
@@ -319,7 +346,83 @@ function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   );
 }
 
+function notificationText(notification) {
+  const actor = getName(notification.actor);
+  const preview = notification.meta?.preview ? `: ${notification.meta.preview}` : "";
+  if (notification.type === "thread_reply") return `${actor} replied in a thread${preview}`;
+  if (notification.type === "room_message") return `${actor} messaged a room${preview}`;
+  return `${actor} sent you a message${preview}`;
+}
+
+function notificationRoute(notification) {
+  if (notification?.entity?.roomId) return `/app/rooms/${encodeURIComponent(notification.entity.roomId)}`;
+  if (notification?.entity?.conversationId) return `/app/chats/${encodeURIComponent(notification.entity.conversationId)}`;
+  return "/app";
+}
+
+function NotificationMenu({ token, enabled = true, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const notifications = useQuery(api.notifications.list, token && open && enabled ? { authToken: token, limit: 30 } : "skip") || [];
+  const unreadCount = useQuery(api.notifications.unreadCount, token && enabled ? { authToken: token } : "skip");
+  const markRead = useMutation(api.notifications.markRead);
+  const unread = Number(unreadCount || 0);
+
+  const openNotification = async (notification) => {
+    try {
+      await markRead({ authToken: token, notificationId: notification.notificationId || notification.id });
+    } catch {
+      // Navigation should still work if marking read races with a deleted notice.
+    }
+    setOpen(false);
+    onNavigate?.(notificationRoute(notification));
+  };
+
+  const markAllRead = () => {
+    markRead({ authToken: token }).catch(() => {});
+  };
+
+  return (
+    <div className="notification-menu">
+      <IconButton title={enabled ? "Notifications" : "Notifications off"} onClick={() => setOpen((value) => !value)}>
+        {enabled ? <Bell size={18} /> : <BellOff size={18} />}
+        {enabled && unread > 0 && <span className="notification-count">{Math.min(unread, 99)}</span>}
+      </IconButton>
+      {open && (
+        <section className="notification-popover">
+          <header>
+            <strong>Notifications</strong>
+            {enabled && notifications.length > 0 && <button type="button" onClick={markAllRead}>Mark all read</button>}
+          </header>
+          {!enabled ? (
+            <p className="empty-copy">Notifications are off.</p>
+          ) : notifications.length === 0 ? (
+            <p className="empty-copy">Nothing new.</p>
+          ) : (
+            <div className="notification-list">
+              {notifications.map((notification) => (
+                <button
+                  key={notification.notificationId || notification.id}
+                  type="button"
+                  className={notification.isRead ? "" : "unread"}
+                  onClick={() => openNotification(notification)}
+                >
+                  <Avatar entity={notification.actor} size="sm" />
+                  <span>
+                    <strong>{notificationText(notification)}</strong>
+                    <small>{formatTime(notification.createdAt)}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
 function ConversationRail({
+  token,
   currentUser,
   selected,
   summaries,
@@ -332,6 +435,7 @@ function ConversationRail({
   onStartDirect,
   onCreateRoom,
   onOpenSettings,
+  onNavigate,
   onLogout,
 }) {
   const [showPeople, setShowPeople] = useState(false);
@@ -339,6 +443,8 @@ function ConversationRail({
   const [roomName, setRoomName] = useState("");
   const [roomDescription, setRoomDescription] = useState("");
   const [roomMembers, setRoomMembers] = useState([]);
+  const [roomError, setRoomError] = useState("");
+  const [roomBusy, setRoomBusy] = useState(false);
   const presenceById = useMemo(() => new Map((presence || []).map((entry) => [entry.userId, entry])), [presence]);
   const visibleSummaries = (summaries || []).filter((summary) =>
     [summary.title, summary.lastMessage?.text].filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())
@@ -347,11 +453,19 @@ function ConversationRail({
   const submitRoom = async (event) => {
     event.preventDefault();
     if (!roomName.trim()) return;
-    await onCreateRoom({ name: roomName.trim(), description: roomDescription.trim(), memberIds: roomMembers });
-    setRoomName("");
-    setRoomDescription("");
-    setRoomMembers([]);
-    setShowRoomForm(false);
+    setRoomError("");
+    setRoomBusy(true);
+    try {
+      await onCreateRoom({ name: roomName.trim(), description: roomDescription.trim(), memberIds: roomMembers });
+      setRoomName("");
+      setRoomDescription("");
+      setRoomMembers([]);
+      setShowRoomForm(false);
+    } catch (err) {
+      setRoomError(displayError(err, "Could not create room"));
+    } finally {
+      setRoomBusy(false);
+    }
   };
 
   return (
@@ -365,6 +479,7 @@ function ConversationRail({
           </div>
         </div>
         <div className="rail-actions">
+          <NotificationMenu token={token} enabled={currentUser?.settings?.notifications !== false} onNavigate={onNavigate} />
           <IconButton title="Settings" onClick={onOpenSettings}><Settings size={18} /></IconButton>
           <IconButton title="Sign out" onClick={onLogout}><LogOut size={18} /></IconButton>
         </div>
@@ -413,7 +528,8 @@ function ConversationRail({
               );
             })}
           </div>
-          <button className="primary-button small">Create room</button>
+          {roomError && <p className="drawer-error">{roomError}</p>}
+          <button className="primary-button small" disabled={roomBusy}>{roomBusy ? "Creating..." : "Create room"}</button>
         </form>
       )}
 
@@ -690,6 +806,7 @@ function Composer({
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [error, setError] = useState("");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -699,11 +816,14 @@ function Composer({
   const submit = async () => {
     if (disabled || busy) return;
     if (!value.trim() && files.length === 0) return;
+    setError("");
     setBusy(true);
     try {
       const attachments = files.length ? await uploadFiles(files) : [];
       await onSend(value, attachments);
       setFiles([]);
+    } catch (err) {
+      setError(displayError(err, "Could not send message"));
     } finally {
       setBusy(false);
     }
@@ -740,6 +860,7 @@ function Composer({
           ref={inputRef}
           value={value}
           onChange={(event) => {
+            setError("");
             onChange(event.target.value);
             onTyping?.();
           }}
@@ -778,6 +899,7 @@ function Composer({
           {busy ? <Check size={18} /> : <Send size={18} />}
         </button>
       </div>
+      {error && <p className="composer-error">{error}</p>}
     </div>
   );
 }
@@ -874,11 +996,15 @@ function ThreadPanel({ token, currentUser, threadRoot, onClose, uploadFiles }) {
 function InfoPanel({ selected, summary, room, currentUser, users, onClose, onAddMembers, onUpdateRoom, onUpdateSettings }) {
   const [memberIds, setMemberIds] = useState([]);
   const [roomDraft, setRoomDraft] = useState({ name: room?.name || "", description: room?.description || "" });
+  const [roomSettingsDraft, setRoomSettingsDraft] = useState(room?.settings || {});
   const [settingsDraft, setSettingsDraft] = useState(currentUser?.settings || {});
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState("");
 
   useEffect(() => {
     setRoomDraft({ name: room?.name || "", description: room?.description || "" });
-  }, [room?.name, room?.description]);
+    setRoomSettingsDraft(room?.settings || {});
+  }, [room?.name, room?.description, room?.settings]);
 
   useEffect(() => {
     setSettingsDraft(currentUser?.settings || {});
@@ -886,6 +1012,19 @@ function InfoPanel({ selected, summary, room, currentUser, users, onClose, onAdd
 
   if (!selected) return null;
   const directUser = summary?.user || selected.user;
+  const run = async (label, action, success) => {
+    setFeedback("");
+    setBusy(label);
+    try {
+      await action();
+      setFeedback(success);
+    } catch (err) {
+      setFeedback(displayError(err, "Could not save"));
+    } finally {
+      setBusy("");
+    }
+  };
+  const feedbackIsError = feedback && !/saved|updated|added/i.test(feedback);
 
   return (
     <aside className="info-panel">
@@ -910,12 +1049,16 @@ function InfoPanel({ selected, summary, room, currentUser, users, onClose, onAdd
           {["owner", "admin"].includes(room?.viewerRole) && (
             <form className="settings-stack" onSubmit={(event) => {
               event.preventDefault();
-              onUpdateRoom({ name: roomDraft.name, description: roomDraft.description });
+              run("room", () => onUpdateRoom({
+                name: roomDraft.name,
+                description: roomDraft.description,
+                settings: { onlyAdminsCanMessage: Boolean(roomSettingsDraft.onlyAdminsCanMessage) },
+              }), "Room updated");
             }}>
               <label><span>Name</span><input value={roomDraft.name} onChange={(event) => setRoomDraft({ ...roomDraft, name: event.target.value })} /></label>
               <label><span>Description</span><input value={roomDraft.description} onChange={(event) => setRoomDraft({ ...roomDraft, description: event.target.value })} /></label>
-              <label className="check-row"><input type="checkbox" checked={Boolean(room?.settings?.onlyAdminsCanMessage)} onChange={(event) => onUpdateRoom({ settings: { onlyAdminsCanMessage: event.target.checked } })} /> Only admins can message</label>
-              <button className="primary-button small">Save room</button>
+              <label className="check-row"><input type="checkbox" checked={Boolean(roomSettingsDraft.onlyAdminsCanMessage)} onChange={(event) => setRoomSettingsDraft({ ...roomSettingsDraft, onlyAdminsCanMessage: event.target.checked })} /> Only admins can message</label>
+              <button className="primary-button small" disabled={busy === "room"}>{busy === "room" ? "Saving..." : "Save room"}</button>
             </form>
           )}
           <section className="member-section">
@@ -944,20 +1087,24 @@ function InfoPanel({ selected, summary, room, currentUser, users, onClose, onAdd
                 );
               })}
             </div>
-            <button type="button" className="secondary-button" disabled={!memberIds.length} onClick={async () => {
-              await onAddMembers(memberIds);
-              setMemberIds([]);
-            }}>Add selected</button>
+            <button type="button" className="secondary-button" disabled={!memberIds.length || busy === "members"} onClick={async () => {
+              await run("members", async () => {
+                await onAddMembers(memberIds);
+                setMemberIds([]);
+              }, "Members added");
+            }}>{busy === "members" ? "Adding..." : "Add selected"}</button>
           </section>
         </>
       )}
+
+      {feedback && <p className={`panel-feedback ${feedbackIsError ? "error" : ""}`}>{feedback}</p>}
 
       <section className="member-section">
         <h3>Your settings</h3>
         <label className="check-row"><input type="checkbox" checked={settingsDraft.readReceipts !== false} onChange={(event) => setSettingsDraft({ ...settingsDraft, readReceipts: event.target.checked })} /> Read receipts</label>
         <label className="check-row"><input type="checkbox" checked={settingsDraft.typingIndicator !== false} onChange={(event) => setSettingsDraft({ ...settingsDraft, typingIndicator: event.target.checked })} /> Typing indicators</label>
         <label className="check-row"><input type="checkbox" checked={settingsDraft.notifications !== false} onChange={(event) => setSettingsDraft({ ...settingsDraft, notifications: event.target.checked })} /> Notifications</label>
-        <button type="button" className="secondary-button" onClick={() => onUpdateSettings(settingsDraft)}>Save settings</button>
+        <button type="button" className="secondary-button" disabled={busy === "settings"} onClick={() => run("settings", () => onUpdateSettings(settingsDraft), "Settings saved")}>{busy === "settings" ? "Saving..." : "Save settings"}</button>
       </section>
     </aside>
   );
@@ -985,6 +1132,7 @@ function SettingsPage({
   const [notice, setNotice] = useState("");
   const settings = currentUser?.settings || {};
   const activeSection = SETTINGS_SECTIONS.some((entry) => entry.id === section) ? section : "profile";
+  const noticeIsError = notice && !/saved|updated|removed/i.test(notice);
 
   useEffect(() => {
     setProfileDraft({
@@ -1003,7 +1151,7 @@ function SettingsPage({
       await action();
       setNotice(success);
     } catch (err) {
-      setNotice(err?.message || "Could not save");
+      setNotice(displayError(err, "Could not save"));
     } finally {
       setBusy("");
     }
@@ -1032,7 +1180,7 @@ function SettingsPage({
           <strong>Settings</strong>
           <small>{SETTINGS_SECTIONS.find((entry) => entry.id === activeSection)?.description}</small>
         </div>
-        {notice && <span className={`settings-notice ${notice.includes("Could") ? "error" : ""}`}>{notice}</span>}
+        {notice && <span className={`settings-notice ${noticeIsError ? "error" : ""}`}>{notice}</span>}
       </header>
 
       <div className="settings-layout">
@@ -1144,7 +1292,7 @@ function SettingsPage({
               <section className="settings-card wide">
                 <div className="settings-card-title">
                   <strong>Chat Background</strong>
-                  <span>Image-style presets without shipping placeholder photos.</span>
+                  <span>Choose the surface behind your conversations.</span>
                 </div>
                 <div className="wallpaper-options">
                   {WALLPAPERS.map((wallpaper) => (
@@ -1182,9 +1330,6 @@ function SettingsPage({
                   ["typingIndicator", "Typing indicators", "Show when you are typing."],
                   ["lastSeen", "Last seen", "Show last active time when offline."],
                   ["notifications", "Notifications", "Create in-app notifications for new messages."],
-                  ["showProfilePhoto", "Profile photo", "Show uploaded or generated avatar."],
-                  ["showBio", "Bio visibility", "Show your bio in contact details."],
-                  ["showStatus", "Status visibility", "Show your status line."],
                 ].map(([key, label, copy]) => (
                   <label key={key} className="settings-toggle-row">
                     <span>
@@ -1205,25 +1350,43 @@ function SettingsPage({
 
 function ForwardDialog({ token, source, summaries, users, onClose }) {
   const forwardMessage = useMutation(api.messages.forwardMessage);
+  const [error, setError] = useState("");
+  const [busyTarget, setBusyTarget] = useState("");
+
+  useEffect(() => {
+    setError("");
+    setBusyTarget("");
+  }, [source?.messageId, source?._id]);
+
   if (!source) return null;
+  const runForward = async (targetKey, payload) => {
+    setError("");
+    setBusyTarget(targetKey);
+    try {
+      await forwardMessage({
+        authToken: token,
+        messageId: source.messageId || source._id,
+        ...payload,
+      });
+      onClose();
+    } catch (err) {
+      setError(displayError(err, "Could not forward message"));
+    } finally {
+      setBusyTarget("");
+    }
+  };
   const forwardToSummary = async (summary) => {
-    await forwardMessage({
-      authToken: token,
-      messageId: source.messageId || source._id,
+    await runForward(summary.conversationId, {
       targetType: summary.type,
       targetUserId: summary.type === "direct" ? summary.directUserId : undefined,
       targetRoomId: summary.type === "room" ? summary.conversationId : undefined,
     });
-    onClose();
   };
   const forwardToUser = async (user) => {
-    await forwardMessage({
-      authToken: token,
-      messageId: source.messageId || source._id,
+    await runForward(user.publicId, {
       targetType: "direct",
       targetUserId: user.publicId,
     });
-    onClose();
   };
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -1233,17 +1396,18 @@ function ForwardDialog({ token, source, summaries, users, onClose }) {
           <IconButton title="Close" onClick={onClose}><X size={18} /></IconButton>
         </header>
         <div className="forward-preview">{source.text || "Attachment"}</div>
+        {error && <p className="drawer-error forward-error">{error}</p>}
         <div className="forward-list">
           {(summaries || []).map((summary) => (
-            <button key={summary.conversationId} type="button" onClick={() => forwardToSummary(summary)}>
+            <button key={summary.conversationId} type="button" disabled={Boolean(busyTarget)} onClick={() => forwardToSummary(summary)}>
               <Avatar entity={summary.type === "room" ? summary.room : summary.user} size="sm" />
-              {summary.title}
+              {busyTarget === summary.conversationId ? "Forwarding..." : summary.title}
             </button>
           ))}
           {(users || []).map((user) => (
-            <button key={user.publicId} type="button" onClick={() => forwardToUser(user)}>
+            <button key={user.publicId} type="button" disabled={Boolean(busyTarget)} onClick={() => forwardToUser(user)}>
               <Avatar entity={user} size="sm" />
-              {getName(user)}
+              {busyTarget === user.publicId ? "Forwarding..." : getName(user)}
             </button>
           ))}
         </div>
@@ -1314,19 +1478,27 @@ function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const settingsSection = useMemo(() => getSettingsSectionFromPath(routePath), [routePath]);
   const isSettingsRoute = routePath.startsWith("/settings");
   const appSettings = currentUser?.settings || {};
+  const resolvedTheme = useResolvedTheme(appSettings.theme || "system");
 
   useEffect(() => {
+    const applySelected = (next) => {
+      const isSame = selected?.type === next.type
+        && selected?.conversationId === next.conversationId
+        && selected?.directUserId === next.directUserId;
+      if (!isSame) setSelected(next);
+    };
+
     if (isSettingsRoute) return;
     if (routeConversation) {
       const summary = summaries.find((entry) => entry.conversationId === routeConversation.conversationId);
       if (summary) {
-        setSelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room });
+        applySelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room });
         return;
       }
       if (routeConversation.type === "room") {
         const targetRoom = rooms.find((entry) => entry.roomId === routeConversation.conversationId || entry._id === routeConversation.conversationId);
         if (targetRoom) {
-          setSelected({ type: "room", conversationId: targetRoom.roomId || targetRoom._id, title: targetRoom.name, room: targetRoom });
+          applySelected({ type: "room", conversationId: targetRoom.roomId || targetRoom._id, title: targetRoom.name, room: targetRoom });
           return;
         }
       }
@@ -1335,7 +1507,7 @@ function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
         const otherId = first === currentUser.publicId ? second : first;
         const user = users.find((entry) => entry.publicId === otherId);
         if (user) {
-          setSelected({ type: "direct", conversationId: routeConversation.conversationId, directUserId: user.publicId, title: getName(user), user });
+          applySelected({ type: "direct", conversationId: routeConversation.conversationId, directUserId: user.publicId, title: getName(user), user });
           return;
         }
       }
@@ -1468,7 +1640,7 @@ function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     return null;
   }
 
-  const themeClass = appSettings.theme === "dark" ? "theme-dark" : "theme-light";
+  const themeClass = resolvedTheme === "dark" ? "theme-dark" : "theme-light";
   const densityClass = `density-${appSettings.density || "compact"}`;
   const wallpaperClass = `wallpaper-${appSettings.chatWallpaper || "clean"}`;
   const shellStyle = { "--color-sparkle-primary": appSettings.accent || "#4f90e6" };
@@ -1476,6 +1648,7 @@ function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   return (
     <main className={`app-shell ${selected && !isSettingsRoute ? "has-selection" : ""} ${isSettingsRoute ? "settings-open" : ""} ${themeClass} ${densityClass} ${wallpaperClass}`} style={shellStyle}>
       <ConversationRail
+        token={token}
         currentUser={currentUser}
         selected={selected}
         summaries={summaries}
@@ -1492,6 +1665,7 @@ function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
           navigate?.(`/app/rooms/${encodeURIComponent(nextRoom.roomId)}`);
         }}
         onOpenSettings={() => navigate?.("/settings/profile")}
+        onNavigate={navigate}
         onLogout={() => {
           localStorage.removeItem(TOKEN_KEY);
           onLogout();
