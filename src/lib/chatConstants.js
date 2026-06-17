@@ -35,12 +35,12 @@ export const AVATAR_STYLES = [
 ];
 
 export const ACCENTS = [
-  "#b45309",
-  "#0f766e",
+  "#a85612",
+  "#116a5b",
   "#be123c",
   "#6d5d40",
-  "#7c3aed",
-  "#475569",
+  "#8a4b7d",
+  "#4f5d44",
 ];
 
 export const WALLPAPERS = [
@@ -114,4 +114,4 @@ export const SETTINGS_SECTIONS = [
   },
 ];
 
-export const DEFAULT_ACCENT = "#b45309";
+export const DEFAULT_ACCENT = "#a85612";

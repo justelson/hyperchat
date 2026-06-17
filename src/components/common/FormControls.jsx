@@ -60,7 +60,7 @@ export function ColorPicker({ value, onChange, swatches = [] }) {
       </div>
       <label className="custom-color">
         <span>Custom</span>
-        <input type="color" value={value || "#b45309"} onChange={(event) => onChange(event.target.value)} />
+        <input type="color" value={value || "#a85612"} onChange={(event) => onChange(event.target.value)} />
       </label>
     </div>
   );

@@ -12,7 +12,7 @@ import {
   requireRoomMembership,
 } from "./chatHelpers";
 
-const roomColors = ["#0f766e", "#1d4ed8", "#7c3aed", "#be123c", "#a16207", "#475569"];
+const roomColors = ["#116a5b", "#a85612", "#8a4b7d", "#be123c", "#6d5d40", "#4f5d44"];
 
 const requireRoomAdmin = async (ctx: any, roomId: string, userId: string) => {
   const membership = await requireRoomMembership(ctx, roomId, userId);

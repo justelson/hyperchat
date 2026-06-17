@@ -24,7 +24,7 @@ export const dicebearUrl = (entity) => {
 };
 
 export const hashColor = (value = "", fallback = DEFAULT_ACCENT) => {
-  const palette = ["#b45309", "#0f766e", "#be123c", "#6d5d40", "#7c3aed", "#475569"];
+  const palette = ["#a85612", "#116a5b", "#be123c", "#6d5d40", "#8a4b7d", "#4f5d44"];
   const input = String(value || "");
   if (!input) return fallback;
   const hash = input.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -130,7 +130,7 @@ export const conversationEntity = (summary) => summary?.type === "room" ? summar
 
 export const searchBlob = (...values) => values.filter(Boolean).join(" ").toLowerCase();
 
-const legacyBlueAccents = new Set(["#4f90e6", "#5796f2", "#3d7ae6"]);
+const legacyBlueAccents = new Set(["#4f90e6", "#5796f2", "#3d7ae6", "#b45309", "#0f766e"]);
 const legacyWallpapers = new Set(["clean", "midnight", "aurora", "grid"]);
 const legacyAuthBackgrounds = new Set(["midnight", "aurora"]);
 

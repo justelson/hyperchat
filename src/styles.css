@@ -6,8 +6,8 @@
   --color-sparkle-card: #ffffff;
   --color-sparkle-border: #e2e8f0;
   --color-sparkle-border-secondary: #cbd5e1;
-  --color-sparkle-primary: #b45309;
-  --color-sparkle-secondary: #0f766e;
+  --color-sparkle-primary: #a85612;
+  --color-sparkle-secondary: #116a5b;
   --color-sparkle-accent: #f8fafc;
   --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.12);
   --composer-height: 72px;
@@ -64,8 +64,8 @@ code {
   min-height: 100dvh;
   place-items: center;
   background:
-    radial-gradient(circle at 20% 12%, rgba(79, 144, 230, 0.13), transparent 34%),
-    linear-gradient(180deg, #f8fafc 0%, #e8eef6 100%);
+    radial-gradient(circle at 20% 12%, rgba(17, 106, 91, 0.13), transparent 34%),
+    linear-gradient(180deg, #fffefa 0%, #f3f1eb 100%);
 }
 
 .config-panel,
@@ -2196,8 +2196,8 @@ select:focus {
   --color-sparkle-card: #fffdf8;
   --color-sparkle-border: #ded6c8;
   --color-sparkle-border-secondary: #c9bead;
-  --color-sparkle-primary: #b45309;
-  --color-sparkle-secondary: #0f766e;
+  --color-sparkle-primary: #a85612;
+  --color-sparkle-secondary: #116a5b;
   --color-sparkle-accent: #eee7dc;
   --shadow-soft: 0 18px 44px rgba(45, 35, 21, 0.14);
   --radius-panel: 8px;
@@ -3790,4 +3790,224 @@ select {
   to {
     transform: translateY(0);
   }
+}
+
+/* Theme and type balance pass. Keep this last so it wins over the legacy base rules above. */
+:root {
+  --font-ui: Aptos, "Segoe UI Variable Text", "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Segoe UI Variable Display", Aptos, "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --color-sparkle-bg: #f3f1eb;
+  --color-sparkle-text: #24221d;
+  --color-sparkle-text-secondary: #676157;
+  --color-sparkle-text-muted: #8c8376;
+  --color-sparkle-card: #fffefa;
+  --color-sparkle-border: #dad3c6;
+  --color-sparkle-border-secondary: #c6bbaa;
+  --color-sparkle-primary: #a85612;
+  --color-sparkle-secondary: #116a5b;
+  --color-sparkle-accent: #e8e9df;
+  --shadow-soft: 0 18px 42px rgba(37, 33, 25, 0.13);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-synthesis-weight: none;
+  text-rendering: geometricPrecision;
+}
+
+body,
+.app-shell,
+.auth-screen,
+.settings-page,
+.modal-shell,
+.conversation-rail,
+.chat-pane,
+.thread-panel {
+  color: var(--color-sparkle-text);
+  font-family: var(--font-ui);
+}
+
+.app-shell {
+  background: var(--color-sparkle-bg);
+}
+
+.app-shell.theme-dark {
+  --color-sparkle-bg: #151711;
+  --color-sparkle-text: #f2eee5;
+  --color-sparkle-text-secondary: #beb4a4;
+  --color-sparkle-text-muted: #948a78;
+  --color-sparkle-card: #1d2019;
+  --color-sparkle-border: #34382d;
+  --color-sparkle-border-secondary: #454b3c;
+  --color-sparkle-accent: #272b22;
+  --shadow-soft: 0 20px 48px rgba(0, 0, 0, 0.42);
+  color-scheme: dark;
+}
+
+.config-screen,
+.loading-screen {
+  background:
+    radial-gradient(circle at 20% 12%, color-mix(in srgb, var(--color-sparkle-secondary) 13%, transparent), transparent 34%),
+    linear-gradient(180deg, var(--color-sparkle-card) 0%, var(--color-sparkle-bg) 100%);
+}
+
+h1,
+h2,
+h3,
+.auth-brand h1,
+.auth-form-heading h2,
+.chat-intro h2,
+.settings-header strong,
+.settings-profile-card h2,
+.info-hero-card h2 {
+  font-family: var(--font-display);
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.brand-mark {
+  font-family: var(--font-display);
+  font-weight: 760;
+}
+
+strong,
+label,
+.rail-title strong,
+.conversation-title strong,
+.entity-row strong,
+.settings-card-title strong,
+.info-nav-list button,
+.modal-header h2,
+.chat-identity strong {
+  font-weight: 650;
+}
+
+.primary-button,
+.secondary-button,
+.icon-button,
+.rail-filters button,
+.segment-control button,
+.conversation-type-badge,
+.header-kind,
+.intro-pill,
+.modal-eyebrow,
+.list-separator,
+.info-action,
+.emoji-tabs button,
+.settings-tile strong,
+.wallpaper-choice span {
+  font-weight: 650;
+}
+
+.primary-button {
+  background: var(--color-sparkle-primary);
+  color: #fffaf4;
+}
+
+.conversation-rail,
+.modal-shell,
+.settings-card,
+.settings-profile-card,
+.notification-popover,
+.forward-preview {
+  background: color-mix(in srgb, var(--color-sparkle-card) 98%, var(--color-sparkle-bg));
+}
+
+.rail-title strong,
+.modal-header h2,
+.modal-header strong,
+.settings-header strong,
+.chat-identity strong {
+  color: var(--color-sparkle-text);
+}
+
+.rail-title small,
+.modal-header small,
+.settings-header small,
+.conversation-preview,
+.entity-row small,
+.room-preview-line small,
+.info-hero-card p,
+.settings-card-title span {
+  color: var(--color-sparkle-text-secondary);
+}
+
+.conversation-item.selected {
+  background: color-mix(in srgb, var(--color-sparkle-primary) 14%, var(--color-sparkle-card));
+}
+
+.app-shell.theme-dark .conversation-item.selected {
+  background: color-mix(in srgb, var(--color-sparkle-primary) 22%, var(--color-sparkle-card));
+}
+
+.message-row.own .message-bubble {
+  background: color-mix(in srgb, var(--color-sparkle-primary) 96%, #151711);
+  color: #fffaf4;
+}
+
+.app-shell.theme-dark .message-row.own .message-bubble {
+  background: color-mix(in srgb, var(--color-sparkle-primary) 86%, #2b1708);
+}
+
+.wallpaper-choice {
+  isolation: isolate;
+}
+
+.wallpaper-choice::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, transparent 10%, rgba(0, 0, 0, 0.48) 100%);
+  content: "";
+}
+
+.wallpaper-choice.wallpaper-doodle::after {
+  background: linear-gradient(180deg, rgba(255, 254, 250, 0.14), rgba(255, 254, 250, 0.78));
+}
+
+.wallpaper-choice img {
+  z-index: -1;
+  opacity: 0.9;
+}
+
+.wallpaper-choice:not(.wallpaper-doodle) span,
+.wallpaper-choice:not(.wallpaper-doodle) small {
+  color: #fffaf4;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.48);
+}
+
+.wallpaper-choice.wallpaper-doodle span {
+  color: var(--color-sparkle-text);
+}
+
+.wallpaper-choice.wallpaper-doodle small {
+  color: var(--color-sparkle-text-secondary);
+  text-shadow: none;
+}
+
+.app-shell.theme-dark .wallpaper-choice.wallpaper-doodle span {
+  color: #24221d;
+}
+
+.app-shell.theme-dark .wallpaper-choice.wallpaper-doodle small {
+  color: #676157;
+}
+
+.app-shell .chat-pane.settings-pane {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-sparkle-bg) 96%, var(--color-sparkle-card)), var(--color-sparkle-bg));
+}
+
+.auth-side {
+  background:
+    linear-gradient(180deg, rgba(14, 18, 12, 0.2), rgba(14, 18, 12, 0.74)),
+    url("/wallpapers/optimized/pexels-jplenio-1146708-1920w.webp") center / cover;
+}
+
+.auth-side::after {
+  background:
+    radial-gradient(circle at 28% 18%, rgba(168, 86, 18, 0.28), transparent 34%),
+    radial-gradient(circle at 72% 74%, rgba(17, 106, 91, 0.22), transparent 42%);
+}
+
+.notification-count {
+  background: #be123c;
 }

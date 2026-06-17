@@ -44,7 +44,7 @@ export const defaultUserSettings = () => ({
   profilePhoto: true,
   theme: "system",
   density: "compact",
-  accent: "#b45309",
+  accent: "#a85612",
   chatWallpaper: "doodle",
   authBackground: "forest",
   avatarSeed: "",
