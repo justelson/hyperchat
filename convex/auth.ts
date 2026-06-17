@@ -17,12 +17,6 @@ const avatarStyles = ["adventurer-neutral", "adventurer", "avataaars", "avataaar
 const normalizeUsername = (value?: string) =>
   normalizeText(value).toLowerCase().replace(/^@+/, "").replace(/[^a-z0-9_.-]/g, "").slice(0, 32);
 
-const requirePassword = (password?: string) => {
-  const next = String(password || "");
-  if (next.length < 8) throw new Error("Password must be at least 8 characters");
-  return next;
-};
-
 const normalizeAvatarStyle = (value?: string) => {
   const next = normalizeText(value);
   return avatarStyles.includes(next) ? next : "adventurer-neutral";
@@ -31,6 +25,12 @@ const normalizeAvatarStyle = (value?: string) => {
 const userPayload = (user: any, token?: string) => ({
   user: compactUser(user),
   token,
+});
+
+const authError = (error: string) => ({
+  user: null,
+  token: undefined,
+  error,
 });
 
 export const me = query({
@@ -54,11 +54,12 @@ export const signUp = mutation({
   handler: async (ctx, args) => {
     const email = normalizeEmail(args.email);
     const fullName = normalizeText(args.fullName);
-    const password = requirePassword(args.password);
-    if (!email || !email.includes("@")) throw new Error("Enter a valid email");
-    if (fullName.length < 2) throw new Error("Name must be at least 2 characters");
+    const password = String(args.password || "");
+    if (password.length < 8) return authError("Password must be at least 8 characters");
+    if (!email || !email.includes("@")) return authError("Enter a valid email");
+    if (fullName.length < 2) return authError("Name must be at least 2 characters");
     const existingEmail = await getUserByEmail(ctx, email);
-    if (existingEmail) throw new Error("Email already registered");
+    if (existingEmail) return authError("Email already registered");
 
     const username = normalizeUsername(args.username || email.split("@")[0]);
     if (username) {
@@ -66,7 +67,7 @@ export const signUp = mutation({
         .query("users")
         .withIndex("by_username", (q: any) => q.eq("username", username))
         .first();
-      if (existingUsername) throw new Error("Username already taken");
+      if (existingUsername) return authError("Username already taken");
     }
 
     const now = Date.now();
@@ -107,9 +108,9 @@ export const login = mutation({
   handler: async (ctx, args) => {
     const email = normalizeEmail(args.email);
     const user = await getUserByEmail(ctx, email);
-    if (!user) throw new Error("Invalid email or password");
+    if (!user) return authError("Invalid email or password");
     const passwordHash = await hashPassword(email, args.password);
-    if (passwordHash !== user.passwordHash) throw new Error("Invalid email or password");
+    if (passwordHash !== user.passwordHash) return authError("Invalid email or password");
     const token = await issueAuthSession(ctx, user.publicId, {
       source: "login",
       tokenVersion: Number(user.tokenVersion || 0),

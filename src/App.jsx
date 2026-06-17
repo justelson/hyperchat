@@ -242,6 +242,10 @@ function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           avatarSeed: form.avatarSeed,
           avatarStyle: form.avatarStyle,
         });
+      if (result?.error || !result?.token) {
+        setError(result?.error || (mode === "login" ? "Invalid email or password" : "Could not create account"));
+        return;
+      }
       localStorage.setItem(TOKEN_KEY, result.token);
       onToken(result.token);
       navigate?.("/app", { replace: true });
