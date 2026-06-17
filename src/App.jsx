@@ -122,9 +122,23 @@ const formatDay = (value) => {
 const displayError = (err, fallback = "Could not complete that action") => {
   const raw = String(err?.message || fallback);
   const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const knownMessage = [
+    "Invalid email or password",
+    "Email already registered",
+    "Username already taken",
+    "Password must be at least 8 characters",
+    "Enter a valid email",
+    "Name must be at least 2 characters",
+    "Type a message first",
+    "Only admins can message in this room",
+    "Room name must be at least 2 characters",
+  ].find((message) => raw.includes(message));
+  if (knownMessage) return knownMessage;
   const uncaught = lines.find((line) => line.includes("Uncaught Error:"));
   const chosen = uncaught ? uncaught.replace(/^.*Uncaught Error:\s*/, "") : lines[0];
-  return (chosen || fallback).replace(/^Error:\s*/, "");
+  const clean = (chosen || fallback).replace(/^Error:\s*/, "");
+  if (/\[CONVEX|Request ID|Server Error|Called by client/i.test(clean)) return fallback;
+  return clean;
 };
 
 const sortMessages = (messages = []) =>
@@ -232,7 +246,7 @@ function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
       onToken(result.token);
       navigate?.("/app", { replace: true });
     } catch (err) {
-      setError(err?.message || "Could not continue");
+      setError(displayError(err, mode === "login" ? "Invalid email or password" : "Could not create account"));
     } finally {
       setBusy(false);
     }
