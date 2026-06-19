@@ -1,6 +1,6 @@
-import { Eye, EyeOff, Loader2, Lock, Shuffle, User } from "lucide-react";
+import { Chrome, Eye, EyeOff, Loader2, Lock, Shuffle, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AVATAR_STYLES, TOKEN_KEY } from "../../lib/chatConstants";
 import { createAvatarSeed, displayError } from "../../lib/chatUtils";
@@ -24,6 +24,8 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   const [agreed, setAgreed] = useState(false);
   const login = useMutation(api.auth.login);
   const signUp = useMutation(api.auth.signUp);
+  const googleLogin = useAction(api.auth.googleLogin);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
   useEffect(() => {
     setError("");
@@ -32,6 +34,73 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setError("");
+  };
+
+  const finishAuth = (result, fallback = "Could not sign in") => {
+    if (result?.error || !result?.token) {
+      setError(result?.error || fallback);
+      return;
+    }
+    localStorage.setItem(TOKEN_KEY, result.token);
+    onToken(result.token);
+    const pendingInvite = sessionStorage.getItem("hyperchat:pendingInvite");
+    if (pendingInvite) sessionStorage.removeItem("hyperchat:pendingInvite");
+    navigate?.(pendingInvite || "/app", { replace: true });
+  };
+
+  const loadGoogleScript = () => new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) {
+      resolve();
+      return;
+    }
+    const existing = document.querySelector("script[data-google-identity]");
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = "true";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+
+  const signInWithGoogle = async () => {
+    if (!googleClientId) {
+      setError("Google sign-in needs setup.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await loadGoogleScript();
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response) => {
+          try {
+            const result = await googleLogin({ credential: response.credential });
+            finishAuth(result, "Google sign-in failed");
+          } catch (err) {
+            setError(displayError(err, "Google sign-in failed"));
+          } finally {
+            setBusy(false);
+          }
+        },
+      });
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+          setBusy(false);
+          setError("Google sign-in was not available in this browser.");
+        }
+      });
+    } catch (err) {
+      setError(displayError(err, "Google sign-in failed"));
+      setBusy(false);
+    }
   };
 
   const submit = async (event) => {
@@ -54,14 +123,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           avatarStyle: form.avatarStyle,
         });
 
-      if (result?.error || !result?.token) {
-        setError(result?.error || (mode === "login" ? "Invalid email or password" : "Could not create account"));
-        return;
-      }
-
-      localStorage.setItem(TOKEN_KEY, result.token);
-      onToken(result.token);
-      navigate?.("/app", { replace: true });
+      finishAuth(result, mode === "login" ? "Invalid email or password" : "Could not create account");
     } catch (err) {
       setError(displayError(err, mode === "login" ? "Invalid email or password" : "Could not create account"));
     } finally {
@@ -109,6 +171,17 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => navigate?.("/auth/sign-in")}>Sign in</button>
             <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => navigate?.("/auth/sign-up")}>Create</button>
           </div>
+
+          <button
+            type="button"
+            className="secondary-button google-button"
+            disabled={busy || !googleClientId}
+            onClick={signInWithGoogle}
+            title={googleClientId ? "Continue with Google" : "Set VITE_GOOGLE_CLIENT_ID and GOOGLE_CLIENT_ID"}
+          >
+            <Chrome size={17} />
+            Continue with Google
+          </button>
 
           {mode === "signup" && (
             <>

@@ -9,6 +9,9 @@ import { IconButton } from "../common/IconButton";
 function notificationText(notification) {
   const actor = getName(notification.actor);
   const preview = notification.meta?.preview ? `: ${notification.meta.preview}` : "";
+  if (notification.type === "friend_request") return `${actor} sent a friend request`;
+  if (notification.type === "friend_accept") return `${actor} accepted your friend request`;
+  if (notification.type === "room_invite") return `${actor} invited you to a room`;
   if (notification.type === "thread_reply") return `${actor} replied in a thread${preview}`;
   if (notification.type === "room_message") return `${actor} messaged a room${preview}`;
   return `${actor} sent you a message${preview}`;

@@ -23,14 +23,18 @@ import { ForwardDialog } from "./ForwardDialog";
 import { InfoModal } from "./InfoModal";
 import { MessageList } from "./MessageList";
 import { ThreadPanel } from "./ThreadPanel";
+import { ReactionDetailsModal } from "./ReactionDetailsModal";
 
 export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const currentUser = useQuery(api.auth.me, token ? { authToken: token } : "skip");
   const summaries = useQuery(api.conversations.list, token ? { authToken: token } : "skip") || [];
   const rooms = useQuery(api.rooms.list, token ? { authToken: token } : "skip") || [];
   const users = useQuery(api.users.list, token ? { authToken: token } : "skip") || [];
+  const capabilities = useQuery(api.access.capabilities, token ? { authToken: token } : "skip") || {};
   const createRoom = useMutation(api.rooms.create);
+  const joinByInvite = useMutation(api.rooms.joinByInvite);
   const addMembers = useMutation(api.rooms.addMembers);
+  const rotateInviteLink = useMutation(api.rooms.rotateInviteLink);
   const updateRoom = useMutation(api.rooms.update);
   const updateProfile = useMutation(api.users.updateProfile);
   const updateProfilePhoto = useMutation(api.users.updateProfilePhoto);
@@ -57,6 +61,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const [threadRoot, setThreadRoot] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
   const [forwardSource, setForwardSource] = useState(null);
+  const [reactionTarget, setReactionTarget] = useState(null);
   const typingTimerRef = useRef(null);
   const { sidebarWidth, isResizing, startResizing } = useSidebarResize();
   const isMobileLayout = useMediaQuery("(max-width: 760px)");
@@ -87,6 +92,10 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const routeConversation = useMemo(() => parseConversationRoute(routePath), [routePath]);
   const settingsSection = useMemo(() => getSettingsSectionFromPath(routePath), [routePath]);
   const isSettingsRoute = routePath.startsWith("/settings");
+  const inviteCode = useMemo(() => {
+    const match = routePath.match(/^\/invite\/(.+)$/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }, [routePath]);
   const appSettings = normalizeVisualSettings(currentUser?.settings || {});
   const resolvedTheme = useResolvedTheme(appSettings.theme || "system");
 
@@ -128,6 +137,21 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
       navigate?.(appRouteForSummary(first), { replace: true });
     }
   }, [currentUser, isMobileLayout, isSettingsRoute, navigate, routeConversation, rooms, routePath, selected, summaries, users]);
+
+  useEffect(() => {
+    if (!token || !inviteCode || !currentUser) return;
+    let cancelled = false;
+    joinByInvite({ authToken: token, inviteCode })
+      .then((nextRoom) => {
+        if (cancelled || !nextRoom?.roomId) return;
+        setSelected({ type: "room", conversationId: nextRoom.roomId, title: nextRoom.name, room: nextRoom });
+        navigate?.(`/app/rooms/${encodeURIComponent(nextRoom.roomId)}`, { replace: true });
+      })
+      .catch(() => navigate?.("/app", { replace: true }));
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, inviteCode, joinByInvite, navigate, token]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -255,6 +279,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const wallpaperClass = `wallpaper-${appSettings.chatWallpaper || "doodle"}`;
   const shellStyle = {
     "--color-sparkle-primary": appSettings.accent || DEFAULT_ACCENT,
+    "--message-font-size": `${appSettings.fontSize || 14}px`,
     "--sidebar-width": `${sidebarWidth}px`,
   };
 
@@ -267,7 +292,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const backToChats = () => navigate?.(selected ? `/app/${selected.type === "room" ? "rooms" : "chats"}/${encodeURIComponent(selected.conversationId)}` : "/app");
 
   return (
-    <main className={`app-shell ${selected && !isSettingsRoute ? "has-selection" : ""} ${isSettingsRoute ? "settings-open" : ""} ${themeClass} ${densityClass} ${wallpaperClass} ${isResizing ? "is-resizing" : ""}`} style={shellStyle}>
+    <main className={`app-shell ${selected && !isSettingsRoute ? "has-selection" : ""} ${isSettingsRoute ? "settings-open" : ""} ${themeClass} ${densityClass} ${wallpaperClass} theme-pack-${appSettings.themePack || "fieldstone"} ${isResizing ? "is-resizing" : ""}`} style={shellStyle}>
       <ConversationRail
         token={token}
         currentUser={currentUser}
@@ -279,8 +304,13 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
         onSearch={setSearch}
         onSelectSummary={selectSummary}
         onStartDirect={startDirect}
+        canAccessPowerGroups={Boolean(capabilities.canAccessPowerGroups)}
         onCreateRoom={async (payload) => {
           const nextRoom = await createRoom({ authToken: token, ...payload });
+          setSelected({ type: "room", conversationId: nextRoom.roomId, title: nextRoom.name, room: nextRoom });
+          navigate?.(`/app/rooms/${encodeURIComponent(nextRoom.roomId)}`);
+        }}
+        onOpenRoom={(nextRoom) => {
           setSelected({ type: "room", conversationId: nextRoom.roomId, title: nextRoom.name, room: nextRoom });
           navigate?.(`/app/rooms/${encodeURIComponent(nextRoom.roomId)}`);
         }}
@@ -347,6 +377,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
                   onEdit={(message) => { setEditing(message); setReplyTo(null); setComposerText(message.text || ""); }}
                   onDelete={(message) => deleteMessage({ authToken: token, messageId: message.messageId || message._id })}
                   onReaction={(message, emoji) => reactMessage({ authToken: token, messageId: message.messageId || message._id, emoji })}
+                  onViewReactions={setReactionTarget}
                 />
                 <Composer
                   value={composerText}
@@ -385,6 +416,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
           onClose={() => setShowInfo(false)}
           onAddMembers={(memberIds) => selected?.type === "room" && addMembers({ authToken: token, roomId: selected.conversationId, memberIds })}
           onUpdateRoom={(patch) => selected?.type === "room" && updateRoom({ authToken: token, roomId: selected.conversationId, ...patch })}
+          onRotateInviteLink={() => selected?.type === "room" && rotateInviteLink({ authToken: token, roomId: selected.conversationId })}
           onUpdateSettings={(settings) => updateSettings({ authToken: token, settings })}
           onTogglePin={() => currentSummary && setPreference({ authToken: token, conversationId: currentSummary.conversationId, pinned: !currentSummary.pinned })}
           onToggleMute={() => currentSummary && setPreference({ authToken: token, conversationId: currentSummary.conversationId, muted: !currentSummary.muted })}
@@ -399,6 +431,16 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
           summaries={summaries}
           users={users}
           onClose={() => setForwardSource(null)}
+        />
+      )}
+
+      {!isSettingsRoute && (
+        <ReactionDetailsModal
+          open={Boolean(reactionTarget)}
+          message={reactionTarget}
+          currentUser={currentUser}
+          onClose={() => setReactionTarget(null)}
+          onReaction={(emoji) => reactionTarget && reactMessage({ authToken: token, messageId: reactionTarget.messageId || reactionTarget._id, emoji })}
         />
       )}
     </main>

@@ -1,4 +1,5 @@
 import { Bell, Palette, Shield, User } from "lucide-react";
+import { THEME_PACKS } from "./themeCatalog";
 
 export const TOKEN_KEY = "hyperchat:token";
 
@@ -27,6 +28,56 @@ export const QUICK_EMOJI_CATEGORIES = [
   },
 ];
 
+export const EMOJI_NAMES = {
+  "👍": "thumbs up like yes approve",
+  "❤️": "heart love",
+  "😂": "joy laugh funny",
+  "😮": "wow surprised",
+  "😢": "sad cry",
+  "🙏": "pray thanks please",
+  "🔥": "fire hot",
+  "👏": "clap applause",
+  "😍": "heart eyes love",
+  "🎉": "party celebrate",
+  "✅": "check done",
+  "✨": "sparkle magic",
+  "😀": "grinning smile",
+  "😃": "smile happy",
+  "😄": "laugh smile",
+  "😁": "grin",
+  "😅": "sweat smile relief",
+  "🤣": "rolling laugh",
+  "🙂": "slight smile",
+  "😉": "wink",
+  "😊": "blush smile",
+  "🥰": "love hearts",
+  "😘": "kiss",
+  "🤔": "thinking",
+  "😎": "cool sunglasses",
+  "🥺": "pleading",
+  "😭": "cry sob",
+  "😴": "sleep",
+  "👋": "wave hello",
+  "👌": "ok",
+  "🤝": "handshake",
+  "🙌": "raised hands",
+  "💪": "strong muscle",
+  "✍️": "write",
+  "👀": "eyes looking",
+  "🧠": "brain",
+  "🫶": "heart hands",
+  "💬": "speech chat",
+  "⭐": "star favorite",
+  "💫": "dizzy",
+  "💯": "hundred perfect",
+  "❌": "cross no",
+  "⚠️": "warning",
+  "📌": "pin",
+  "🔒": "lock private",
+  "📎": "attachment clip",
+  "💡": "idea lightbulb",
+};
+
 export const AVATAR_STYLES = [
   { value: "adventurer-neutral", label: "Adventurer" },
   { value: "avataaars-neutral", label: "Avataaars" },
@@ -35,12 +86,9 @@ export const AVATAR_STYLES = [
 ];
 
 export const ACCENTS = [
-  "#a85612",
+  ...THEME_PACKS.map((theme) => theme.accent),
   "#116a5b",
-  "#be123c",
   "#6d5d40",
-  "#8a4b7d",
-  "#4f5d44",
 ];
 
 export const WALLPAPERS = [

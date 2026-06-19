@@ -54,3 +54,30 @@ export const markRead = mutation({
     return { ok: true };
   },
 });
+
+export const markReadByContext = mutation({
+  args: {
+    authToken: v.string(),
+    conversationId: v.optional(v.string()),
+    roomId: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const viewer = await requireUserByToken(ctx, args.authToken);
+    const rows = await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q: any) => q.eq("userId", viewer.publicId))
+      .collect();
+    const at = Date.now();
+    for (const row of rows) {
+      const entity = row.entity || {};
+      const matchesConversation = args.conversationId && entity.conversationId === args.conversationId;
+      const matchesRoom = args.roomId && entity.roomId === args.roomId;
+      const matchesThread = args.threadId && entity.threadId === args.threadId;
+      if (matchesConversation || matchesRoom || matchesThread) {
+        await ctx.db.patch(row._id, { isRead: true, updatedAt: at });
+      }
+    }
+    return { ok: true };
+  },
+});

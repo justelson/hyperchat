@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as access from "../access.js";
 import type * as auth from "../auth.js";
 import type * as authSessions from "../authSessions.js";
 import type * as chatHelpers from "../chatHelpers.js";
 import type * as conversations from "../conversations.js";
 import type * as files from "../files.js";
+import type * as friends from "../friends.js";
 import type * as groupMemberships from "../groupMemberships.js";
 import type * as ids from "../ids.js";
 import type * as messageThreads from "../messageThreads.js";
@@ -29,11 +31,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  access: typeof access;
   auth: typeof auth;
   authSessions: typeof authSessions;
   chatHelpers: typeof chatHelpers;
   conversations: typeof conversations;
   files: typeof files;
+  friends: typeof friends;
   groupMemberships: typeof groupMemberships;
   ids: typeof ids;
   messageThreads: typeof messageThreads;

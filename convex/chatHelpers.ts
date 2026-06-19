@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { compactUser, defaultRoomSettings, directConversationId, makeId, messagePreview } from "./ids";
 import { getUserByPublicId } from "./authSessions";
+import { assertRoomVisibilityAccess } from "./access";
 
 export const getMessageById = async (ctx: any, messageId?: string) => {
   const id = String(messageId || "").trim();
@@ -60,6 +61,14 @@ export const getRoomMemberships = async (ctx: any, roomId: string) =>
     .withIndex("by_room", (q: any) => q.eq("roomId", roomId))
     .collect();
 
+export const getLatestConversationMessage = async (ctx: any, conversationId: string) => {
+  const messages = await ctx.db
+    .query("messages")
+    .withIndex("by_conversation", (q: any) => q.eq("conversationId", conversationId))
+    .collect();
+  return messages.sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0] || null;
+};
+
 export const parseDirectConversation = (conversationId?: string) => {
   const value = String(conversationId || "");
   if (!value.startsWith("direct:")) return [];
@@ -91,6 +100,7 @@ export const requireConversationAccess = async (
   }
   const room = await getRoomById(ctx, conversationId);
   if (!room) throw new Error("Room not found");
+  assertRoomVisibilityAccess(room, actor);
   const membership = await requireRoomMembership(ctx, conversationId, actor.publicId);
   const memberships = await getRoomMemberships(ctx, conversationId);
   return {
@@ -126,6 +136,21 @@ export const ensureConversationSummary = async (
   return await ctx.db.get(id);
 };
 
+export const seedConversationSummary = async (
+  ctx: any,
+  userId: string,
+  conversationId: string,
+  type: "direct" | "room",
+  options: { unread?: boolean } = {}
+) => {
+  const summary = await ensureConversationSummary(ctx, userId, conversationId, type);
+  if (summary.lastMessageAt) return summary;
+  const latest = await getLatestConversationMessage(ctx, conversationId);
+  if (!latest) return summary;
+  await updateConversationSummary(ctx, userId, conversationId, type, latest, Boolean(options.unread));
+  return await ctx.db.get(summary._id);
+};
+
 export const updateConversationSummary = async (
   ctx: any,
   userId: string,
@@ -148,6 +173,40 @@ export const updateConversationSummary = async (
     unreadCount: incrementUnread ? Number(summary.unreadCount || 0) + 1 : Number(summary.unreadCount || 0),
     updatedAt: Date.now(),
   });
+};
+
+export const refreshConversationSummaries = async (
+  ctx: any,
+  conversationId: string,
+  type: "direct" | "room",
+  participantIds: string[]
+) => {
+  const latest = await getLatestConversationMessage(ctx, conversationId);
+  const at = Date.now();
+  for (const userId of participantIds.filter(Boolean)) {
+    const summary = await ensureConversationSummary(ctx, userId, conversationId, type);
+    if (latest) {
+      await ctx.db.patch(summary._id, {
+        lastMessage: {
+          messageId: latest.messageId,
+          senderId: latest.senderId,
+          text: messagePreview(latest),
+          createdAt: latest.createdAt,
+          forwarded: Boolean(latest.forwardedFrom),
+          attachmentCount: Array.isArray(latest.attachments) ? latest.attachments.length : 0,
+        },
+        lastMessageAt: latest.createdAt,
+        updatedAt: at,
+      });
+    } else {
+      await ctx.db.patch(summary._id, {
+        lastMessage: undefined,
+        lastMessageAt: undefined,
+        unreadCount: 0,
+        updatedAt: at,
+      });
+    }
+  }
 };
 
 export const markConversationReadForUser = async (
@@ -188,7 +247,7 @@ export const createNotification = async (
   ctx: any,
   userId: string,
   actorId: string,
-  type: "message" | "room_message" | "thread_reply",
+  type: "message" | "room_message" | "thread_reply" | "friend_request" | "friend_accept" | "room_invite",
   entity: any = {},
   meta: any = {}
 ) => {
@@ -249,9 +308,14 @@ export const hydrateMessage = async (ctx: any, message: any, viewerId?: string) 
     ...attachment,
     url: attachment.url || (attachment.storageId ? await ctx.storage.getUrl(attachment.storageId) : undefined),
   })));
+  const reactions = await Promise.all((message.reactions || []).map(async (reaction: any) => ({
+    ...reaction,
+    user: compactUser(await getUserByPublicId(ctx, reaction.userId)),
+  })));
   return {
     ...message,
     attachments,
+    reactions,
     _id: message.messageId,
     id: message.messageId,
     senderProfile: compactUser(sender),
@@ -270,9 +334,14 @@ export const hydrateThreadReply = async (ctx: any, reply: any, viewerId?: string
     ...attachment,
     url: attachment.url || (attachment.storageId ? await ctx.storage.getUrl(attachment.storageId) : undefined),
   })));
+  const reactions = await Promise.all((reply.reactions || []).map(async (reaction: any) => ({
+    ...reaction,
+    user: compactUser(await getUserByPublicId(ctx, reaction.userId)),
+  })));
   return {
     ...reply,
     attachments,
+    reactions,
     _id: reply.messageId,
     id: reply.messageId,
     senderProfile: compactUser(sender),

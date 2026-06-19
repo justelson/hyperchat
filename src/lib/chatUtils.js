@@ -1,4 +1,5 @@
 import { DEFAULT_ACCENT, SETTINGS_SECTIONS } from "./chatConstants";
+import { normalizeFontSize, normalizeThemePack } from "./themeCatalog";
 
 export const directConversationId = (a, b) => `direct:${[String(a), String(b)].sort().join(":")}`;
 
@@ -90,6 +91,14 @@ export const displayError = (err, fallback = "Could not complete that action") =
     "Only admins can message in this room",
     "Room name must be at least 2 characters",
     "Pick someone else to message",
+    "Pick someone else",
+    "Friend request not found",
+    "This room is restricted",
+    "Use an invite link to join this room",
+    "Invite link is no longer valid",
+    "Google sign-in is not configured",
+    "Google sign-in failed",
+    "Google email is not verified",
   ].find((message) => raw.includes(message));
   if (knownMessage) return knownMessage;
   const uncaught = lines.find((line) => line.includes("Uncaught Error:"));
@@ -155,6 +164,8 @@ export const resolveAuthBackground = (background) => {
 export const normalizeVisualSettings = (settings = {}) => ({
   ...settings,
   accent: resolveAccent(settings.accent),
+  themePack: normalizeThemePack(settings.themePack),
+  fontSize: normalizeFontSize(settings.fontSize),
   chatWallpaper: resolveWallpaper(settings.chatWallpaper),
   authBackground: resolveAuthBackground(settings.authBackground),
 });

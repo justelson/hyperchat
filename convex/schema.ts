@@ -8,8 +8,10 @@ const settings = v.object({
   lastSeen: v.optional(v.boolean()),
   profilePhoto: v.optional(v.boolean()),
   theme: v.optional(v.union(v.literal("light"), v.literal("dark"), v.literal("system"))),
+  themePack: v.optional(v.string()),
   density: v.optional(v.union(v.literal("compact"), v.literal("comfortable"))),
   accent: v.optional(v.string()),
+  fontSize: v.optional(v.number()),
   chatWallpaper: v.optional(v.string()),
   authBackground: v.optional(v.string()),
   avatarSeed: v.optional(v.string()),
@@ -54,6 +56,8 @@ export default defineSchema({
     publicId: v.string(),
     email: v.string(),
     passwordHash: v.string(),
+    authProvider: v.optional(v.union(v.literal("password"), v.literal("google"))),
+    googleSub: v.optional(v.string()),
     fullName: v.string(),
     username: v.optional(v.string()),
     avatarColor: v.optional(v.string()),
@@ -74,6 +78,7 @@ export default defineSchema({
   })
     .index("by_publicId", ["publicId"])
     .index("by_email", ["email"])
+    .index("by_googleSub", ["googleSub"])
     .index("by_username", ["username"])
     .searchIndex("search_users", {
       searchField: "fullName",
@@ -229,11 +234,15 @@ export default defineSchema({
 
   groups: defineTable({
     roomId: v.string(),
+    slug: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     ownerId: v.string(),
     adminIds: v.optional(v.array(v.string())),
     memberIds: v.optional(v.array(v.string())),
+    visibility: v.optional(v.union(v.literal("private"), v.literal("discoverable"), v.literal("power"))),
+    inviteCode: v.optional(v.string()),
+    inviteRevokedAt: v.optional(v.number()),
     avatarColor: v.optional(v.string()),
     settings: v.optional(v.object({
       onlyAdminsCanMessage: v.optional(v.boolean()),
@@ -247,7 +256,10 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_roomId", ["roomId"])
+    .index("by_slug", ["slug"])
     .index("by_owner", ["ownerId"])
+    .index("by_visibility", ["visibility"])
+    .index("by_inviteCode", ["inviteCode"])
     .index("by_lastMessageAt", ["lastMessageAt"]),
 
   groupmemberships: defineTable({
@@ -286,7 +298,14 @@ export default defineSchema({
     notificationId: v.string(),
     userId: v.string(),
     actorId: v.optional(v.string()),
-    type: v.union(v.literal("message"), v.literal("room_message"), v.literal("thread_reply")),
+    type: v.union(
+      v.literal("message"),
+      v.literal("room_message"),
+      v.literal("thread_reply"),
+      v.literal("friend_request"),
+      v.literal("friend_accept"),
+      v.literal("room_invite")
+    ),
     entity: v.optional(v.object({
       messageId: v.optional(v.string()),
       conversationId: v.optional(v.string()),
@@ -302,4 +321,20 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_read", ["userId", "isRead", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
+
+  friendships: defineTable({
+    friendshipId: v.string(),
+    pairKey: v.string(),
+    requesterId: v.string(),
+    recipientId: v.string(),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("declined")),
+    respondedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_pair", ["pairKey"])
+    .index("by_requester", ["requesterId"])
+    .index("by_recipient", ["recipientId"])
+    .index("by_requester_status", ["requesterId", "status"])
+    .index("by_recipient_status", ["recipientId", "status"]),
 });

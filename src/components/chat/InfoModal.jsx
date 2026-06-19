@@ -1,8 +1,8 @@
-import { ArrowLeft, BarChart3, BellOff, Edit3, Hash, Pin, Plus, Search, Shield, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, BellOff, Copy, Edit3, Hash, Link, Pin, Plus, RotateCw, Search, Shield, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { displayError, formatTime, getName, searchBlob } from "../../lib/chatUtils";
 import { Avatar } from "../common/Avatar";
-import { CheckboxRow, ToggleRow } from "../common/FormControls";
+import { SegmentControl, ToggleRow } from "../common/FormControls";
 import { Modal } from "../common/Modal";
 import { SearchInput } from "../common/SearchInput";
 
@@ -25,6 +25,7 @@ export function InfoModal({
   onClose,
   onAddMembers,
   onUpdateRoom,
+  onRotateInviteLink,
   onUpdateSettings,
   onTogglePin,
   onToggleMute,
@@ -180,9 +181,37 @@ export function InfoModal({
       <div className="modal-stack">
         <label><span>Name</span><input value={roomDraft.name} onChange={(event) => setRoomDraft({ ...roomDraft, name: event.target.value })} /></label>
         <label><span>Description</span><textarea value={roomDraft.description} onChange={(event) => setRoomDraft({ ...roomDraft, description: event.target.value })} /></label>
+        <label>
+          <span>Visibility</span>
+          <SegmentControl
+            value={room?.visibility || "private"}
+            onChange={(visibility) => run("room", () => onUpdateRoom({ visibility }), "Room updated")}
+            options={[
+              { value: "private", label: "Private" },
+              { value: "discoverable", label: "Discover" },
+              ...(room?.visibility === "power" ? [{ value: "power", label: "Power" }] : []),
+            ]}
+            className="visibility-segments"
+          />
+        </label>
         <ToggleRow checked={Boolean(roomSettingsDraft.onlyAdminsCanMessage)} onChange={(value) => setRoomSettingsDraft({ ...roomSettingsDraft, onlyAdminsCanMessage: value })} title="Only admins can message" description="Members can still read the room." />
         <ToggleRow checked={roomSettingsDraft.allowMemberInvites !== false} onChange={(value) => setRoomSettingsDraft({ ...roomSettingsDraft, allowMemberInvites: value })} title="Member invites" description="Allow members to add people." />
+        <ToggleRow checked={roomSettingsDraft.allowLinks !== false} onChange={(value) => setRoomSettingsDraft({ ...roomSettingsDraft, allowLinks: value })} title="Invite links" description="Allow people with the link to join." />
         <ToggleRow checked={roomSettingsDraft.allowFiles !== false} onChange={(value) => setRoomSettingsDraft({ ...roomSettingsDraft, allowFiles: value })} title="File attachments" description="Allow files in this room." />
+        {room?.inviteCode && roomSettingsDraft.allowLinks !== false && (
+          <div className="invite-link-panel">
+            <span><Link size={15} /> Invite link</span>
+            <code>{`${window.location.origin}/invite/${encodeURIComponent(room.inviteCode)}`}</code>
+            <div>
+              <button type="button" className="secondary-button tiny" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/invite/${encodeURIComponent(room.inviteCode)}`)}>
+                <Copy size={13} /> Copy
+              </button>
+              <button type="button" className="secondary-button tiny" onClick={() => run("invite", onRotateInviteLink, "Invite link rotated")}>
+                <RotateCw size={13} /> Rotate
+              </button>
+            </div>
+          </div>
+        )}
         <button
           type="button"
           className="primary-button"

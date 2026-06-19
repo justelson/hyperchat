@@ -1,4 +1,4 @@
-import { Hash, LogOut, MessageSquare, Pin, Plus, Settings, Users } from "lucide-react";
+import { Compass, Hash, LogOut, MessageSquare, Pin, Plus, Settings, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { appRouteForSummary, conversationEntity, formatTime, getName, searchBlob } from "../../lib/chatUtils";
 import { Avatar } from "../common/Avatar";
@@ -7,6 +7,7 @@ import { SearchInput } from "../common/SearchInput";
 import { NotificationMenu } from "../notifications/NotificationMenu";
 import { NewChatModal } from "./NewChatModal";
 import { NewRoomModal } from "./NewRoomModal";
+import { RoomDiscoveryModal } from "./RoomDiscoveryModal";
 
 const filters = [
   { id: "all", label: "All" },
@@ -65,7 +66,9 @@ export function ConversationRail({
   onSearch,
   onSelectSummary,
   onStartDirect,
+  canAccessPowerGroups,
   onCreateRoom,
+  onOpenRoom,
   onOpenSettings,
   onNavigate,
   onLogout,
@@ -74,6 +77,7 @@ export function ConversationRail({
   const [filter, setFilter] = useState("all");
   const [showNewChat, setShowNewChat] = useState(false);
   const [showNewRoom, setShowNewRoom] = useState(false);
+  const [showDiscoverRooms, setShowDiscoverRooms] = useState(false);
 
   const railSummaries = useMemo(() => {
     const base = summaries || [];
@@ -131,6 +135,7 @@ export function ConversationRail({
         <div className="rail-actions">
           <IconButton title="New chat" onClick={() => setShowNewChat(true)}><Plus size={18} /></IconButton>
           <IconButton title="New room" onClick={() => setShowNewRoom(true)}><Users size={18} /></IconButton>
+          <IconButton title="Find rooms" onClick={() => setShowDiscoverRooms(true)}><Compass size={18} /></IconButton>
         </div>
       </header>
 
@@ -186,6 +191,7 @@ export function ConversationRail({
 
       <NewChatModal
         open={showNewChat}
+        token={token}
         users={users}
         presenceById={presenceById}
         onClose={() => setShowNewChat(false)}
@@ -193,9 +199,17 @@ export function ConversationRail({
       />
       <NewRoomModal
         open={showNewRoom}
+        token={token}
         users={users}
+        canAccessPowerGroups={canAccessPowerGroups}
         onClose={() => setShowNewRoom(false)}
         onCreateRoom={onCreateRoom}
+      />
+      <RoomDiscoveryModal
+        open={showDiscoverRooms}
+        token={token}
+        onClose={() => setShowDiscoverRooms(false)}
+        onJoined={onOpenRoom}
       />
     </aside>
   );

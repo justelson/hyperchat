@@ -1,30 +1,42 @@
 import { Check, Loader2, Users } from "lucide-react";
+import { useQuery } from "convex/react";
 import { useMemo, useState } from "react";
+import { api } from "../../../convex/_generated/api";
 import { displayError, getName, searchBlob } from "../../lib/chatUtils";
 import { Avatar } from "../common/Avatar";
+import { SegmentControl } from "../common/FormControls";
 import { Modal } from "../common/Modal";
 import { SearchInput } from "../common/SearchInput";
 
-export function NewRoomModal({ open, users, onClose, onCreateRoom }) {
+export function NewRoomModal({ open, token, users, canAccessPowerGroups = false, onClose, onCreateRoom }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [memberIds, setMemberIds] = useState([]);
   const [query, setQuery] = useState("");
+  const [visibility, setVisibility] = useState("private");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const friends = useQuery(api.friends.listFriends, token && open ? { authToken: token } : "skip");
 
   const filteredUsers = useMemo(() => {
     const lowered = query.trim().toLowerCase();
-    return (users || [])
+    return (friends || users || [])
       .filter((user) => !lowered || searchBlob(user.fullName, user.username, user.email).includes(lowered))
       .slice(0, 80);
-  }, [query, users]);
+  }, [friends, query, users]);
+
+  const visibilityOptions = useMemo(() => [
+    { value: "private", label: "Private" },
+    { value: "discoverable", label: "Discoverable" },
+    ...(canAccessPowerGroups ? [{ value: "power", label: "Power" }] : []),
+  ], [canAccessPowerGroups]);
 
   const reset = () => {
     setName("");
     setDescription("");
     setMemberIds([]);
     setQuery("");
+    setVisibility("private");
     setError("");
   };
 
@@ -39,7 +51,7 @@ export function NewRoomModal({ open, users, onClose, onCreateRoom }) {
     setBusy(true);
     setError("");
     try {
-      await onCreateRoom?.({ name: name.trim(), description: description.trim(), memberIds });
+      await onCreateRoom?.({ name: name.trim(), description: description.trim(), memberIds, visibility });
       close();
     } catch (err) {
       setError(displayError(err, "Could not create room"));
@@ -75,6 +87,15 @@ export function NewRoomModal({ open, users, onClose, onCreateRoom }) {
         <label>
           <span>Description</span>
           <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What is this room for?" />
+        </label>
+        <label>
+          <span>Visibility</span>
+          <SegmentControl
+            value={visibility}
+            onChange={setVisibility}
+            options={visibilityOptions}
+            className="visibility-segments"
+          />
         </label>
         <SearchInput value={query} onChange={setQuery} placeholder="Add members" />
         <div className="entity-list member-select-list">

@@ -11,6 +11,7 @@ import {
   getRoomMemberships,
   hydrateMessage,
   markConversationReadForUser,
+  refreshConversationSummaries,
   requireConversationAccess,
   updateConversationSummary,
 } from "./chatHelpers";
@@ -215,6 +216,18 @@ export const markConversationRead = mutation({
     const actor = await requireUserByToken(ctx, args.authToken);
     await requireConversationAccess(ctx, actor, args.conversationType, args.conversationId);
     await markConversationReadForUser(ctx, actor.publicId, args.conversationId, args.conversationType, args.lastReadMessageId);
+    const notifications = await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q: any) => q.eq("userId", actor.publicId))
+      .collect();
+    for (const row of notifications) {
+      const entity = row.entity || {};
+      const matchesConversation = entity.conversationId === args.conversationId;
+      const matchesRoom = entity.roomId === args.conversationId;
+      if (matchesConversation || matchesRoom) {
+        await ctx.db.patch(row._id, { isRead: true, updatedAt: Date.now() });
+      }
+    }
     if (args.lastReadMessageId) {
       const message = await getMessageById(ctx, args.lastReadMessageId);
       if (message && !message.readBy?.some((entry: any) => entry.userId === actor.publicId)) {
@@ -242,6 +255,8 @@ export const edit = mutation({
     if (message.senderId !== actor.publicId) throw new Error("You can only edit your own messages");
     const text = assertMessageBody(args.text, message.attachments);
     await ctx.db.patch(message._id, { text, edited: true, editedAt: Date.now(), updatedAt: Date.now() });
+    const access = await requireConversationAccess(ctx, actor, message.conversationType, message.conversationId);
+    await refreshConversationSummaries(ctx, message.conversationId, message.conversationType, access.participantIds);
     return await hydrateMessage(ctx, await ctx.db.get(message._id), actor.publicId);
   },
 });
@@ -261,6 +276,8 @@ export const remove = mutation({
       senderDeletedAt: Date.now(),
       updatedAt: Date.now(),
     });
+    const access = await requireConversationAccess(ctx, actor, message.conversationType, message.conversationId);
+    await refreshConversationSummaries(ctx, message.conversationId, message.conversationType, access.participantIds);
     return { ok: true };
   },
 });

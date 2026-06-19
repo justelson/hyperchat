@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { QUICK_EMOJI_CATEGORIES } from "../../lib/chatConstants";
+import { EMOJI_NAMES, QUICK_EMOJI_CATEGORIES } from "../../lib/chatConstants";
 import { AnimatedEmoji } from "./AnimatedEmoji";
 
 const emojiRows = QUICK_EMOJI_CATEGORIES.flatMap((category) =>
@@ -13,7 +13,10 @@ export function EmojiPicker({ onSelect, compact = false }) {
   const filtered = useMemo(() => {
     if (query.trim()) {
       const lowered = query.trim().toLowerCase();
-      return emojiRows.filter((entry) => entry.emoji.includes(lowered) || entry.category.includes(lowered));
+      return emojiRows.filter((entry) => {
+        const names = EMOJI_NAMES[entry.emoji] || "";
+        return entry.emoji.includes(lowered) || entry.category.includes(lowered) || names.includes(lowered);
+      });
     }
     return QUICK_EMOJI_CATEGORIES.find((category) => category.id === activeCategory)?.items.map((emoji) => ({ emoji })) || [];
   }, [activeCategory, query]);

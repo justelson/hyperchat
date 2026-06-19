@@ -153,8 +153,10 @@ export const updateSettings = mutation({
       lastSeen: v.optional(v.boolean()),
       profilePhoto: v.optional(v.boolean()),
       theme: v.optional(v.union(v.literal("light"), v.literal("dark"), v.literal("system"))),
+      themePack: v.optional(v.string()),
       density: v.optional(v.union(v.literal("compact"), v.literal("comfortable"))),
       accent: v.optional(v.string()),
+      fontSize: v.optional(v.number()),
       chatWallpaper: v.optional(v.string()),
       authBackground: v.optional(v.string()),
       avatarSeed: v.optional(v.string()),
@@ -170,6 +172,8 @@ export const updateSettings = mutation({
     if (incoming.avatarSeed !== undefined) incoming.avatarSeed = normalizeText(incoming.avatarSeed).slice(0, 80);
     if (incoming.avatarStyle !== undefined) incoming.avatarStyle = normalizeAvatarStyle(incoming.avatarStyle);
     if (incoming.accent !== undefined) incoming.accent = normalizeText(incoming.accent).slice(0, 24);
+    if (incoming.themePack !== undefined) incoming.themePack = normalizeText(incoming.themePack).slice(0, 40);
+    if (incoming.fontSize !== undefined) incoming.fontSize = Math.max(12, Math.min(18, Number(incoming.fontSize || 14)));
     if (incoming.chatWallpaper !== undefined) incoming.chatWallpaper = normalizeText(incoming.chatWallpaper).slice(0, 80);
     if (incoming.authBackground !== undefined) incoming.authBackground = normalizeText(incoming.authBackground).slice(0, 80);
     const nextSettings = {

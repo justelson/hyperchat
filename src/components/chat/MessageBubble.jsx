@@ -34,7 +34,7 @@ function AttachmentList({ attachments = [] }) {
   );
 }
 
-function ReactionPills({ reactions = [], onReaction, message }) {
+function ReactionPills({ reactions = [], onReaction, onViewReactions, message }) {
   const grouped = reactions.reduce((acc, entry) => {
     const emoji = entry.emoji || entry;
     if (!emoji) return acc;
@@ -46,11 +46,20 @@ function ReactionPills({ reactions = [], onReaction, message }) {
   return (
     <div className="reaction-pills">
       {entries.map(([emoji, count]) => (
-        <button key={emoji} type="button" onClick={() => onReaction(message, emoji)}>
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => onReaction(message, emoji)}
+          onDoubleClick={() => onViewReactions?.(message)}
+          onContextMenu={(event) => { event.preventDefault(); onViewReactions?.(message); }}
+        >
           <AnimatedEmoji emoji={emoji} mode="burst" playToken={count} size={15} />
           {count > 1 && <span>{count}</span>}
         </button>
       ))}
+      {(message.reactions || []).length > entries.length && (
+        <button type="button" onClick={() => onViewReactions?.(message)}>+{(message.reactions || []).length - entries.length}</button>
+      )}
     </div>
   );
 }
@@ -94,12 +103,16 @@ export function MessageBubble({
   onEdit,
   onDelete,
   onReaction,
+  onViewReactions,
 }) {
   const isOwn = message.senderId === currentUser?.publicId || message.isOwn;
   const previousSame = previous && previous.type !== "date" && previous.message?.senderId === message.senderId && Math.abs(Number(message.createdAt || 0) - Number(previous.message?.createdAt || 0)) < 10 * 60 * 1000;
   const nextSame = next && next.type !== "date" && next.message?.senderId === message.senderId && Math.abs(Number(next.message?.createdAt || 0) - Number(message.createdAt || 0)) < 10 * 60 * 1000;
   const sender = isOwn ? currentUser : message.senderProfile;
   const text = message.senderDeleted ? "Message deleted" : message.text;
+  const emojiOnly = !message.senderDeleted
+    && !message.attachments?.length
+    && /^\p{Extended_Pictographic}(?:\uFE0F|\u200D|\p{Extended_Pictographic})*$/u.test(String(text || "").trim());
 
   return (
     <div className={`message-row ${isOwn ? "own" : ""} ${previousSame ? "grouped-prev" : ""} ${nextSame ? "grouped-next" : ""}`}>
@@ -124,16 +137,20 @@ export function MessageBubble({
               <span>{message.quotedMessage.text}</span>
             </button>
           )}
-          {text && <p>{text}</p>}
+          {text && (emojiOnly ? (
+            <p className="emoji-only-message"><AnimatedEmoji emoji={text.trim()} mode="loop" size={44} /></p>
+          ) : <p>{text}</p>)}
           <AttachmentList attachments={message.attachments} />
-          <div className="bubble-meta">
-            {message.edited && <span>edited</span>}
-            <span>{formatTime(message.createdAt)}</span>
-            <MessageStatus message={message} isOwn={isOwn} />
-          </div>
+          {(!isOwn || !nextSame) && (
+            <div className="bubble-meta">
+              {message.edited && <span>edited</span>}
+              <span>{formatTime(message.createdAt)}</span>
+              <MessageStatus message={message} isOwn={isOwn} />
+            </div>
+          )}
         </div>
         <div className={`bubble-pills ${isOwn ? "own" : ""}`}>
-          <ReactionPills reactions={message.reactions} onReaction={onReaction} message={message} />
+          <ReactionPills reactions={message.reactions} onReaction={onReaction} onViewReactions={onViewReactions} message={message} />
           {Number(message.threadReplyCount || 0) > 0 && (
             <button type="button" className="thread-pill" onClick={() => onThread(message)}>
               <MessageSquare size={12} />

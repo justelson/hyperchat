@@ -1,6 +1,7 @@
 import { ArrowLeft, Camera, ChevronRight, LogOut, Shuffle, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ACCENTS, AUTH_BACKGROUNDS, AVATAR_STYLES, SETTINGS_SECTIONS, WALLPAPERS } from "../../lib/chatConstants";
+import { THEME_PACKS } from "../../lib/themeCatalog";
 import { createAvatarSeed, displayError, getName, normalizeVisualSettings } from "../../lib/chatUtils";
 import { Avatar } from "../common/Avatar";
 import { ColorPicker, SegmentControl, ToggleRow } from "../common/FormControls";
@@ -156,8 +157,40 @@ export function SettingsPage({
         />
       </section>
       <section className="settings-card wide">
+        <div className="settings-card-title"><strong>Theme pack</strong><span>Color system for the whole app.</span></div>
+        <div className="theme-pack-grid">
+          {THEME_PACKS.map((theme) => (
+            <button
+              key={theme.id}
+              type="button"
+              className={`theme-pack-card ${settingsDraft.themePack === theme.id ? "active" : ""} theme-pack-preview-${theme.id}`}
+              onClick={() => updateSetting({ themePack: theme.id, accent: theme.accent }, "themePack")}
+            >
+              <span className="theme-pack-swatch" />
+              <strong>{theme.label}</strong>
+              <small>{theme.description}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="settings-card wide">
         <div className="settings-card-title"><strong>Accent</strong><span>Choose the app color.</span></div>
         <ColorPicker value={settingsDraft.accent || ACCENTS[0]} onChange={(accent) => updateSetting({ accent }, "accent")} swatches={ACCENTS} />
+      </section>
+      <section className="settings-card wide">
+        <div className="settings-card-title"><strong>Message text</strong><span>Size for chat bubbles.</span></div>
+        <label className="range-control">
+          <span>{settingsDraft.fontSize || 14}px</span>
+          <input
+            type="range"
+            min="12"
+            max="18"
+            value={settingsDraft.fontSize || 14}
+            onChange={(event) => setSettingsDraft({ ...settingsDraft, fontSize: Number(event.target.value) })}
+            onMouseUp={(event) => updateSetting({ fontSize: Number(event.currentTarget.value) }, "fontSize")}
+            onTouchEnd={(event) => updateSetting({ fontSize: Number(event.currentTarget.value) }, "fontSize")}
+          />
+        </label>
       </section>
       <section className="settings-card wide">
         <div className="settings-card-title"><strong>Chat background</strong><span>Images borrowed from the Monax wallpaper set.</span></div>

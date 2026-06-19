@@ -28,6 +28,7 @@ export function MessageList({
   onEdit,
   onDelete,
   onReaction,
+  onViewReactions,
   typingUsers,
 }) {
   const rows = useMemo(() => groupWithDates(messages), [messages]);
@@ -58,6 +59,7 @@ export function MessageList({
             onEdit={onEdit}
             onDelete={onDelete}
             onReaction={onReaction}
+            onViewReactions={onViewReactions}
           />
         ))}
         <TypingIndicator typingUsers={typingUsers} />

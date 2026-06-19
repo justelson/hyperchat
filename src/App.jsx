@@ -10,10 +10,13 @@ export default function App() {
 
   useEffect(() => {
     if (!token && !routePath.startsWith("/auth")) {
+      if (routePath.startsWith("/invite/")) sessionStorage.setItem("hyperchat:pendingInvite", routePath);
       navigate("/auth/sign-in", { replace: true });
     }
     if (token && (routePath === "/" || routePath.startsWith("/auth"))) {
-      navigate("/app", { replace: true });
+      const pendingInvite = sessionStorage.getItem("hyperchat:pendingInvite");
+      if (pendingInvite) sessionStorage.removeItem("hyperchat:pendingInvite");
+      navigate(pendingInvite || "/app", { replace: true });
     }
   }, [navigate, routePath, token]);
 
