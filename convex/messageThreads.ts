@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { makeId, messagePreview, normalizeText } from "./ids";
+import { makeId, messagePreview, normalizeReactionEmoji, normalizeText } from "./ids";
 import { requireUserByToken } from "./authSessions";
 import {
   createNotification,
@@ -118,6 +118,14 @@ export const sendThreadReply = mutation({
     const rootMessage = await getMessageById(ctx, args.rootMessageId);
     if (!rootMessage) throw new Error("Root message not found");
     const access = await requireConversationAccess(ctx, actor, rootMessage.conversationType, rootMessage.conversationId);
+    if (rootMessage.conversationType === "room") {
+      const settings = access.room?.settings || {};
+      const isAdmin = ["owner", "admin"].includes(access.membership?.role);
+      if (settings.onlyAdminsCanMessage && !isAdmin) throw new Error("Only admins can reply in this room");
+      if (settings.allowFiles === false && Array.isArray(args.attachments) && args.attachments.length > 0) {
+        throw new Error("File attachments are disabled in this room");
+      }
+    }
     const text = assertReplyBody(args.text, args.attachments);
     const participantIds = access.participantIds || [];
     const thread = await ensureThread(ctx, rootMessage, actor, participantIds);
@@ -243,7 +251,7 @@ export const toggleThreadReaction = mutation({
       .withIndex("by_messageId", (q: any) => q.eq("messageId", args.messageId))
       .first();
     if (!reply) throw new Error("Reply not found");
-    const emoji = normalizeText(args.emoji).slice(0, 8);
+    const emoji = normalizeReactionEmoji(args.emoji);
     const existing = (reply.reactions || []).filter((entry: any) => !(entry.userId === actor.publicId && entry.emoji === emoji));
     const hadReaction = existing.length !== (reply.reactions || []).length;
     await ctx.db.patch(reply._id, {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const GOOGLE_ANIMATED_EMOJI_BASE = "https://fonts.gstatic.com/s/e/notoemoji/latest";
 const GOOGLE_ANIMATED_EMOJI_SIZE = 512;
@@ -6,7 +6,7 @@ const availability = new Map();
 const preloads = new Map();
 
 function emojiToCodepointSlug(emoji = "") {
-  return Array.from(emoji)
+  return Array.from(String(emoji || "").replace(/\uFE0F/g, ""))
     .map((symbol) => symbol.codePointAt(0)?.toString(16))
     .filter(Boolean)
     .join("_");
@@ -57,10 +57,40 @@ export function warmAnimatedEmojiAssets(emojis = []) {
 
 export function AnimatedEmoji({ emoji, mode = "static", size = 20, className = "", label, playToken = 0 }) {
   const slug = useMemo(() => emojiToCodepointSlug(emoji), [emoji]);
+  const rootRef = useRef(null);
   const [hovered, setHovered] = useState(false);
   const [ready, setReady] = useState(() => availability.get(slug) === true);
-  const shouldAnimate = mode === "loop" || (mode === "hover" && hovered) || (mode === "burst" && playToken);
+  const [visible, setVisible] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const shouldAnimate = !reducedMotion && visible && (mode === "loop" || (mode === "hover" && hovered) || (mode === "burst" && playToken));
   const urls = slug ? getAssetUrls(slug) : null;
+
+  useEffect(() => {
+    setReady(availability.get(slug) === true);
+  }, [slug]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(Boolean(query.matches));
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  useEffect(() => {
+    const node = rootRef.current;
+    if (!node) return undefined;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => setVisible(Boolean(entry?.isIntersecting)), {
+      rootMargin: "120px",
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +105,7 @@ export function AnimatedEmoji({ emoji, mode = "static", size = 20, className = "
 
   return (
     <span
+      ref={rootRef}
       className={`animated-emoji ${shouldAnimate ? "animating" : ""} ${className}`}
       style={{ "--emoji-size": `${size}px` }}
       onMouseEnter={() => setHovered(true)}

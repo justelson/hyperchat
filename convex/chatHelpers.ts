@@ -75,14 +75,38 @@ export const parseDirectConversation = (conversationId?: string) => {
   return value.slice("direct:".length).split(":").filter(Boolean);
 };
 
+const pairKeyFor = (a: string, b: string) => [String(a || ""), String(b || "")].sort().join(":");
+
+export const areFriends = async (ctx: any, userIdA?: string, userIdB?: string) => {
+  if (!userIdA || !userIdB || userIdA === userIdB) return false;
+  const friendship = await ctx.db
+    .query("friendships")
+    .withIndex("by_pair", (q: any) => q.eq("pairKey", pairKeyFor(userIdA, userIdB)))
+    .first();
+  return friendship?.status === "accepted";
+};
+
+export const assertUsersCanInteract = async (ctx: any, actor: any, other: any) => {
+  if (!actor || !other) throw new Error("User not found");
+  if ((actor.blockedUserIds || []).includes(other.publicId) || (other.blockedUserIds || []).includes(actor.publicId)) {
+    throw new Error("You cannot contact this user");
+  }
+  if (!(await areFriends(ctx, actor.publicId, other.publicId))) {
+    throw new Error("Add this person as a friend before messaging");
+  }
+};
+
 export const requireDirectAccess = async (ctx: any, conversationId: string, userId: string) => {
   const participants = parseDirectConversation(conversationId);
   if (participants.length !== 2 || !participants.includes(userId)) {
     throw new Error("You cannot access this conversation");
   }
   const otherId = participants.find((id) => id !== userId);
+  const actor = await getUserByPublicId(ctx, userId);
   const other = await getUserByPublicId(ctx, otherId);
+  if (!actor) throw new Error("Conversation member no longer exists");
   if (!other) throw new Error("Conversation member no longer exists");
+  await assertUsersCanInteract(ctx, actor, other);
   return { participantIds: participants, other };
 };
 
@@ -283,6 +307,7 @@ export const hydrateRoom = async (ctx: any, room: any, viewerId?: string) => {
     _id: room.roomId,
     id: room.roomId,
     type: "room",
+    inviteCode: ["owner", "admin"].includes(viewerMembership?.role) ? room.inviteCode : undefined,
     settings: { ...defaultRoomSettings(), ...(room.settings || {}) },
     memberCount: memberships.length,
     viewerRole: viewerMembership?.role || null,

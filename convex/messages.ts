@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { makeId, messagePreview, normalizeText } from "./ids";
+import { makeId, messagePreview, normalizeReactionEmoji, normalizeText } from "./ids";
 import { requireUserByToken } from "./authSessions";
 import {
   buildDirectConversationId,
@@ -46,6 +46,26 @@ const assertMessageBody = (text?: string, attachments?: any[]) => {
     throw new Error("Type a message first");
   }
   return trimmed;
+};
+
+const assertRoomSendSettings = async (ctx: any, actor: any, room: any, membership: any, payload: any = {}) => {
+  const settings = room.settings || {};
+  const isAdmin = ["owner", "admin"].includes(membership?.role);
+  if (settings.allowFiles === false && Array.isArray(payload.attachments) && payload.attachments.length > 0) {
+    throw new Error("File attachments are disabled in this room");
+  }
+  const slowModeSeconds = Math.max(0, Number(settings.slowModeSeconds || 0));
+  if (!isAdmin && slowModeSeconds > 0) {
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_room", (q: any) => q.eq("roomId", room.roomId))
+      .order("desc")
+      .take(80);
+    const lastOwnMessage = recent.find((message: any) => message.senderId === actor.publicId && !message.senderDeleted);
+    if (lastOwnMessage && Date.now() - Number(lastOwnMessage.createdAt || 0) < slowModeSeconds * 1000) {
+      throw new Error(`Slow mode is on. Try again in ${slowModeSeconds} seconds.`);
+    }
+  }
 };
 
 const insertMessage = async (
@@ -114,18 +134,21 @@ export const list = query({
     conversationType: v.union(v.literal("direct"), v.literal("room")),
     conversationId: v.string(),
     limit: v.optional(v.number()),
+    before: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const actor = await requireUserByToken(ctx, args.authToken);
     await requireConversationAccess(ctx, actor, args.conversationType, args.conversationId);
     const limit = Math.max(1, Math.min(200, Number(args.limit || 80)));
-    const messages = await ctx.db
+    const rows = await ctx.db
       .query("messages")
-      .withIndex("by_conversation", (q: any) => q.eq("conversationId", args.conversationId))
-      .collect();
-    const window = messages
-      .sort((a: any, b: any) => Number(a.createdAt || 0) - Number(b.createdAt || 0))
-      .slice(-limit);
+      .withIndex("by_conversation", (q: any) => {
+        const range = q.eq("conversationId", args.conversationId);
+        return args.before ? range.lt("createdAt", args.before) : range;
+      })
+      .order("desc")
+      .take(limit);
+    const window = rows.reverse();
     return await Promise.all(window.map((message: any) => hydrateMessage(ctx, message, actor.publicId)));
   },
 });
@@ -162,6 +185,7 @@ export const sendRoom = mutation({
     if (room.settings?.onlyAdminsCanMessage && !["owner", "admin"].includes(access.membership.role)) {
       throw new Error("Only admins can message in this room");
     }
+    await assertRoomSendSettings(ctx, actor, room, access.membership, args);
     const memberships = await getRoomMemberships(ctx, args.roomId);
     return await insertMessage(ctx, actor, "room", args.roomId, memberships.map((entry: any) => entry.userId), args);
   },
@@ -289,8 +313,7 @@ export const toggleReaction = mutation({
     const message = await getMessageById(ctx, args.messageId);
     if (!message) throw new Error("Message not found");
     await requireConversationAccess(ctx, actor, message.conversationType, message.conversationId);
-    const emoji = normalizeText(args.emoji).slice(0, 8);
-    if (!emoji) throw new Error("Pick a reaction");
+    const emoji = normalizeReactionEmoji(args.emoji);
     const existing = (message.reactions || []).filter((entry: any) => !(entry.userId === actor.publicId && entry.emoji === emoji));
     const hadReaction = existing.length !== (message.reactions || []).length;
     const next = hadReaction ? existing : [...existing, { emoji, userId: actor.publicId, createdAt: Date.now() }];

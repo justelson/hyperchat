@@ -13,6 +13,7 @@ export function Composer({
   onCancelContext,
   onTyping,
   uploadFiles,
+  attachmentsDisabled = false,
 }) {
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -25,6 +26,13 @@ export function Composer({
   useEffect(() => {
     inputRef.current?.focus();
   }, [replyTo, editing]);
+
+  useEffect(() => {
+    const node = inputRef.current;
+    if (!node) return;
+    node.style.height = "0px";
+    node.style.height = `${Math.min(node.scrollHeight, 150)}px`;
+  }, [value]);
 
   const submit = async () => {
     if (busy) return;
@@ -53,9 +61,26 @@ export function Composer({
 
   const addFiles = (event) => {
     const picked = Array.from(event.target.files || []);
+    if (attachmentsDisabled && picked.length) {
+      setError("File attachments are disabled in this room");
+      event.target.value = "";
+      setShowAttach(false);
+      return;
+    }
     if (picked.length) setFiles((current) => [...current, ...picked]);
     event.target.value = "";
     setShowAttach(false);
+  };
+
+  const addPastedFiles = (event) => {
+    const picked = Array.from(event.clipboardData?.files || []);
+    if (!picked.length) return;
+    if (attachmentsDisabled) {
+      setError("File attachments are disabled in this room");
+      event.preventDefault();
+      return;
+    }
+    setFiles((current) => [...current, ...picked]);
   };
 
   return (
@@ -73,7 +98,7 @@ export function Composer({
         <div className="pending-files">
           {files.map((file) => (
             <span key={`${file.name}-${file.lastModified}`}>
-              <File size={13} /> {file.name}
+              {file.type?.startsWith("image/") ? <Image size={13} /> : <File size={13} />} {file.name}
               <button type="button" onClick={() => setFiles((current) => current.filter((item) => item !== file))}><X size={12} /></button>
             </span>
           ))}
@@ -81,7 +106,12 @@ export function Composer({
       )}
       <div className="composer">
         <div className="composer-tool-wrap">
-          <button type="button" className="composer-tool attachment-trigger" onClick={() => setShowAttach((current) => !current)}>
+          <button
+            type="button"
+            className="composer-tool attachment-trigger"
+            disabled={attachmentsDisabled}
+            onClick={() => attachmentsDisabled ? setError("File attachments are disabled in this room") : setShowAttach((current) => !current)}
+          >
             <Paperclip size={19} />
           </button>
           {showAttach && (
@@ -97,6 +127,7 @@ export function Composer({
           value={value}
           onChange={(event) => { onChange(event.target.value); onTyping?.(); }}
           onKeyDown={handleKeyDown}
+          onPaste={addPastedFiles}
           placeholder={editing ? "Edit message" : "Message"}
           rows={1}
         />

@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, BellOff, Copy, Edit3, Hash, Link, Pin, Plus, RotateCw, Search, Shield, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, BellOff, Copy, Edit3, Hash, Link, Pin, Plus, RotateCw, Search, Shield, ShieldCheck, UserMinus, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { displayError, formatTime, getName, searchBlob } from "../../lib/chatUtils";
 import { Avatar } from "../common/Avatar";
@@ -24,6 +24,9 @@ export function InfoModal({
   users,
   onClose,
   onAddMembers,
+  onRemoveMember,
+  onUpdateMemberRole,
+  onLeaveRoom,
   onUpdateRoom,
   onRotateInviteLink,
   onUpdateSettings,
@@ -89,6 +92,9 @@ export function InfoModal({
     lastMessage: summary?.lastMessageAt ? formatTime(summary.lastMessageAt) : "None",
     unread: Number(summary?.unreadCount || 0),
   };
+  const viewerRole = room?.viewerRole || "";
+  const canManageMembers = ["owner", "admin"].includes(viewerRole);
+  const isOwner = viewerRole === "owner";
 
   const hero = (
     <div className="info-hero-card">
@@ -119,6 +125,11 @@ export function InfoModal({
         <button type="button" onClick={() => setView("stats")}><BarChart3 size={18} /><span>Activity</span><small>{stats.lastMessage}</small></button>
         {!isRoom && <button type="button" onClick={() => setView("privacy")}><Shield size={18} /><span>Privacy</span><small>Visibility controls</small></button>}
       </div>
+      {isRoom && viewerRole !== "owner" && (
+        <button type="button" className="secondary-button danger info-wide-action" disabled={busy === "leave"} onClick={() => run("leave", onLeaveRoom, "Left room")}>
+          Leave room
+        </button>
+      )}
     </>
   );
 
@@ -135,15 +146,42 @@ export function InfoModal({
       <div className="modal-stack">
         <SearchInput value={memberSearch} onChange={setMemberSearch} placeholder="Add members" />
         <div className="entity-list">
-          {(room?.members || []).map((member) => (
-            <div key={member.membershipId || member.userId} className="entity-row static">
-              <Avatar entity={member.user} size="sm" />
-              <span>
-                <strong>{getName(member.user)}</strong>
-                <small>{member.role}</small>
-              </span>
-            </div>
-          ))}
+          {(room?.members || []).map((member) => {
+            const canRemove = canManageMembers
+              && member.userId !== currentUser?.publicId
+              && member.role !== "owner"
+              && (isOwner || member.role === "member");
+            const canPromote = isOwner && member.role === "member";
+            const canDemote = isOwner && member.role === "admin";
+            return (
+              <div key={member.membershipId || member.userId} className="entity-row static member-management-row">
+                <Avatar entity={member.user} size="sm" />
+                <span>
+                  <strong>{getName(member.user)}</strong>
+                  <small>{member.role}</small>
+                </span>
+                {(canRemove || canPromote || canDemote) && (
+                  <div className="entity-actions">
+                    {canPromote && (
+                      <button type="button" className="secondary-button tiny" onClick={() => run(`promote-${member.userId}`, () => onUpdateMemberRole(member.userId, "admin"), "Member promoted")}>
+                        <ShieldCheck size={13} /> Admin
+                      </button>
+                    )}
+                    {canDemote && (
+                      <button type="button" className="secondary-button tiny" onClick={() => run(`demote-${member.userId}`, () => onUpdateMemberRole(member.userId, "member"), "Member demoted")}>
+                        Member
+                      </button>
+                    )}
+                    {canRemove && (
+                      <button type="button" className="icon-mini danger" title="Remove member" onClick={() => run(`remove-${member.userId}`, () => onRemoveMember(member.userId), "Member removed")}>
+                        <UserMinus size={13} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         <div className="list-separator">Add people</div>
         <div className="entity-list">

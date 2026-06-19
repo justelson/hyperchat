@@ -28,11 +28,20 @@ export function NotificationMenu({ token, enabled = true, onNavigate }) {
   const notifications = useQuery(api.notifications.list, token && open && enabled ? { authToken: token, limit: 30 } : "skip") || [];
   const unreadCount = useQuery(api.notifications.unreadCount, token && enabled ? { authToken: token } : "skip");
   const markRead = useMutation(api.notifications.markRead);
+  const markReadByContext = useMutation(api.notifications.markReadByContext);
   const unread = Number(unreadCount || 0);
 
   const openNotification = async (notification) => {
     try {
-      await markRead({ authToken: token, notificationId: notification.notificationId || notification.id });
+      await Promise.all([
+        markRead({ authToken: token, notificationId: notification.notificationId || notification.id }),
+        markReadByContext({
+          authToken: token,
+          conversationId: notification.entity?.conversationId,
+          roomId: notification.entity?.roomId,
+          threadId: notification.entity?.threadId,
+        }),
+      ]);
     } catch {
       // Navigation should still happen if marking read races with deleted data.
     }

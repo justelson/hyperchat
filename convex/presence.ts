@@ -39,11 +39,13 @@ export const getUsersPresence = query({
           .withIndex("by_user", (q: any) => q.eq("userId", userId))
           .first();
         const user = await getUserByPublicId(ctx, userId);
+        const safeUser = compactUser(user);
+        const showPresence = safeUser?.settings?.lastSeen !== false;
         return {
           userId,
-          user: compactUser(user),
-          isOnline: Boolean(presence?.isOnline) && at - Number(presence?.updatedAt || 0) <= ACTIVE_MS,
-          lastSeen: presence?.lastSeen || user?.lastSeen || null,
+          user: safeUser,
+          isOnline: showPresence && Boolean(presence?.isOnline) && at - Number(presence?.updatedAt || 0) <= ACTIVE_MS,
+          lastSeen: showPresence ? (safeUser?.lastSeen || null) : null,
         };
       })
     );

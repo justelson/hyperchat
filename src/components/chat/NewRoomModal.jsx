@@ -20,7 +20,7 @@ export function NewRoomModal({ open, token, users, canAccessPowerGroups = false,
 
   const filteredUsers = useMemo(() => {
     const lowered = query.trim().toLowerCase();
-    return (friends || users || [])
+    return (friends ?? users ?? [])
       .filter((user) => !lowered || searchBlob(user.fullName, user.username, user.email).includes(lowered))
       .slice(0, 80);
   }, [friends, query, users]);

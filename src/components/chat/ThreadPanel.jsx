@@ -5,11 +5,13 @@ import { api } from "../../../convex/_generated/api";
 import { MessageBubble } from "./MessageBubble";
 import { Composer } from "./Composer";
 import { IconButton } from "../common/IconButton";
+import { ReactionDetailsModal } from "./ReactionDetailsModal";
 
-export function ThreadPanel({ token, currentUser, threadRoot, onClose, uploadFiles }) {
+export function ThreadPanel({ token, currentUser, threadRoot, onClose, uploadFiles, attachmentsDisabled = false }) {
   const [replyText, setReplyText] = useState("");
   const [replyTo, setReplyTo] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [reactionTarget, setReactionTarget] = useState(null);
   const threadData = useQuery(api.messageThreads.listThreadReplies, token && threadRoot ? {
     authToken: token,
     rootMessageId: threadRoot.messageId || threadRoot._id,
@@ -80,6 +82,7 @@ export function ThreadPanel({ token, currentUser, threadRoot, onClose, uploadFil
             onEdit={(message) => { setEditing(message); setReplyText(message.text || ""); }}
             onDelete={(message) => threadId && deleteReply({ authToken: token, threadId, messageId: message.messageId || message._id })}
             onReaction={(message, emoji) => threadId && reactReply({ authToken: token, threadId, messageId: message.messageId || message._id, emoji })}
+            onViewReactions={setReactionTarget}
           />
         )) : <p className="thread-empty">No replies yet.</p>}
       </div>
@@ -91,6 +94,14 @@ export function ThreadPanel({ token, currentUser, threadRoot, onClose, uploadFil
         editing={editing}
         onCancelContext={() => { setReplyTo(null); setEditing(null); setReplyText(""); }}
         uploadFiles={uploadFiles}
+        attachmentsDisabled={attachmentsDisabled}
+      />
+      <ReactionDetailsModal
+        open={Boolean(reactionTarget)}
+        message={reactionTarget}
+        currentUser={currentUser}
+        onClose={() => setReactionTarget(null)}
+        onReaction={(emoji) => reactionTarget && threadId && reactReply({ authToken: token, threadId, messageId: reactionTarget.messageId || reactionTarget._id, emoji })}
       />
     </aside>
   );

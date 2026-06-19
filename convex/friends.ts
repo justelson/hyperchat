@@ -26,6 +26,9 @@ const relationshipFor = (friendship: any, viewerId: string) => {
   };
 };
 
+const isBlockedBetween = (viewer: any, user: any) =>
+  (viewer?.blockedUserIds || []).includes(user?.publicId) || (user?.blockedUserIds || []).includes(viewer?.publicId);
+
 const hydratePerson = async (ctx: any, viewerId: string, user: any) => {
   const friendship = await getFriendshipByPair(ctx, viewerId, user?.publicId);
   return {
@@ -44,15 +47,47 @@ export const searchPeople = query({
     const viewer = await requireUserByToken(ctx, args.authToken);
     const search = normalizeText(args.search).toLowerCase();
     const limit = Math.max(1, Math.min(80, Number(args.limit || 50)));
-    const users = await ctx.db.query("users").collect();
-    const filtered = users
-      .filter((user: any) => user.publicId !== viewer.publicId)
+    if (!search) {
+      const outgoing = await ctx.db
+        .query("friendships")
+        .withIndex("by_requester_status", (q: any) => q.eq("requesterId", viewer.publicId).eq("status", "accepted"))
+        .collect();
+      const incoming = await ctx.db
+        .query("friendships")
+        .withIndex("by_recipient_status", (q: any) => q.eq("recipientId", viewer.publicId).eq("status", "accepted"))
+        .collect();
+      const people = await Promise.all([...outgoing, ...incoming]
+        .slice(0, limit)
+        .map(async (row: any) => {
+          const otherId = row.requesterId === viewer.publicId ? row.recipientId : row.requesterId;
+          return await getUserByPublicId(ctx, otherId);
+        }));
+      return await Promise.all(people
+        .filter((user: any) => user && !isBlockedBetween(viewer, user))
+        .map((user: any) => hydratePerson(ctx, viewer.publicId, user)));
+    }
+
+    const byName = await ctx.db
+      .query("users")
+      .withSearchIndex("search_users", (q: any) => q.search("fullName", search))
+      .take(limit);
+    const exactUsername = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q: any) => q.eq("username", search.replace(/^@/, "")))
+      .first();
+    const exactEmail = search.includes("@")
+      ? await ctx.db.query("users").withIndex("by_email", (q: any) => q.eq("email", search)).first()
+      : null;
+    const seen = new Set();
+    const filtered = [exactUsername, exactEmail, ...byName]
+      .filter(Boolean)
       .filter((user: any) => {
-        if (!search) return true;
-        return [user.fullName, user.username, user.email]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(search));
+        if (seen.has(user.publicId)) return false;
+        seen.add(user.publicId);
+        return true;
       })
+      .filter((user: any) => user.publicId !== viewer.publicId)
+      .filter((user: any) => !isBlockedBetween(viewer, user))
       .slice(0, limit);
     return await Promise.all(filtered.map((user: any) => hydratePerson(ctx, viewer.publicId, user)));
   },
@@ -74,7 +109,7 @@ export const listFriends = query({
     const people = await Promise.all(rows.map(async (row: any) => {
       const otherId = row.requesterId === viewer.publicId ? row.recipientId : row.requesterId;
       const user = await getUserByPublicId(ctx, otherId);
-      return user ? await hydratePerson(ctx, viewer.publicId, user) : null;
+      return user && !isBlockedBetween(viewer, user) ? await hydratePerson(ctx, viewer.publicId, user) : null;
     }));
     return people.filter(Boolean);
   },

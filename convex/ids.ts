@@ -11,25 +11,45 @@ export const normalizeText = (value?: string) => String(value || "").trim();
 export const directConversationId = (userIdA: string, userIdB: string) =>
   `direct:${[String(userIdA), String(userIdB)].sort().join(":")}`;
 
+const graphemeCount = (value: string) => {
+  const segmenter = typeof Intl !== "undefined" && Intl.Segmenter
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+  return segmenter
+    ? [...segmenter.segment(value)].length
+    : Array.from(value).length;
+};
+
+export const normalizeReactionEmoji = (value?: string) => {
+  const emoji = normalizeText(value).slice(0, 32);
+  if (!emoji) throw new Error("Pick a reaction");
+  if (graphemeCount(emoji) !== 1) throw new Error("Pick one emoji reaction");
+  const hasEmojiGlyph = /[\p{Extended_Pictographic}\p{Regional_Indicator}#*0-9]/u.test(emoji);
+  const hasTextLetters = /[A-Za-z]/.test(emoji.replace(/\u200D/g, ""));
+  if (!hasEmojiGlyph || hasTextLetters) throw new Error("Pick one emoji reaction");
+  return emoji;
+};
+
 export const compactUser = (user: any) => {
   if (!user) return null;
   const settings = {
     ...defaultUserSettings(),
     ...(user.settings || {}),
   };
+  const showProfilePhoto = settings.showProfilePhoto !== false && settings.profilePhoto !== false;
   return {
     _id: user.publicId,
     publicId: user.publicId,
     fullName: user.fullName,
     username: user.username,
     avatarColor: user.avatarColor,
-    profilePic: user.profilePic,
-    profilePicStorageId: user.profilePicStorageId,
+    profilePic: showProfilePhoto ? user.profilePic : "",
+    profilePicStorageId: showProfilePhoto ? user.profilePicStorageId : undefined,
     avatarSeed: user.avatarSeed || settings.avatarSeed,
     avatarStyle: user.avatarStyle || settings.avatarStyle,
     profileBackdrop: user.profileBackdrop,
-    bio: user.bio,
-    status: user.status,
+    bio: settings.showBio === false ? "" : user.bio,
+    status: settings.showStatus === false ? "" : user.status,
     settings,
     lastSeen: settings.lastSeen === false ? null : user.lastSeen,
     role: user.role || "user",

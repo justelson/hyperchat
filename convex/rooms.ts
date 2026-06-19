@@ -5,6 +5,7 @@ import { defaultRoomSettings, makeId, normalizeText } from "./ids";
 import { getUserByPublicId, requireUserByToken } from "./authSessions";
 import { assertRoomVisibilityAccess, canAccessRoom, isPowerUser } from "./access";
 import {
+  areFriends,
   getRoomById,
   getRoomMembership,
   getRoomMemberships,
@@ -42,12 +43,25 @@ const requireRoomAdmin = async (ctx: any, roomId: string, userId: string) => {
   return membership;
 };
 
-const addMembership = async (ctx: any, roomId: string, userId: string, role = "member") => {
+const removeRoomAccess = async (ctx: any, roomId: string, userId: string) => {
+  const membership = await getRoomMembership(ctx, roomId, userId);
+  if (membership) await ctx.db.delete(membership._id);
+  const summary = await ctx.db
+    .query("conversationsummaries")
+    .withIndex("by_user_conversation", (q: any) => q.eq("userId", userId).eq("conversationId", roomId))
+    .first();
+  if (summary) await ctx.db.delete(summary._id);
+};
+
+const addMembership = async (ctx: any, roomId: string, userId: string, role = "member", invitedBy?: string) => {
   const room = await getRoomById(ctx, roomId);
   if (!room) throw new Error("Room not found");
   const target = await getUserByPublicId(ctx, userId);
   if (!target) throw new Error("User not found");
   if (room.visibility === "power" && !isPowerUser(target)) throw new Error("This room is restricted");
+  if (invitedBy && invitedBy !== userId && !(await areFriends(ctx, invitedBy, userId))) {
+    throw new Error("You can only add friends to a room");
+  }
   const existing = await getRoomMembership(ctx, roomId, userId);
   if (existing) return existing;
   const at = Date.now();
@@ -155,7 +169,7 @@ export const create = mutation({
       updatedAt: at,
     });
     for (const userId of memberIds) {
-      await addMembership(ctx, roomId, userId, userId === owner.publicId ? "owner" : "member");
+      await addMembership(ctx, roomId, userId, userId === owner.publicId ? "owner" : "member", userId === owner.publicId ? undefined : owner.publicId);
     }
     return await hydrateRoom(ctx, await ctx.db.get(docId), owner.publicId);
   },
@@ -174,12 +188,62 @@ export const addMembers = mutation({
       throw new Error("Only admins can invite members");
     }
     const nextIds = Array.from(new Set(args.memberIds || [])).filter(Boolean);
-    for (const userId of nextIds) await addMembership(ctx, args.roomId, userId, "member");
+    for (const userId of nextIds) await addMembership(ctx, args.roomId, userId, "member", actor.publicId);
     const memberships = await getRoomMemberships(ctx, args.roomId);
     await ctx.db.patch(room._id, {
       memberIds: memberships.map((entry: any) => entry.userId),
       updatedAt: Date.now(),
     });
+    return await hydrateRoom(ctx, await getRoomById(ctx, args.roomId), actor.publicId);
+  },
+});
+
+export const removeMember = mutation({
+  args: { authToken: v.string(), roomId: v.string(), memberId: v.string() },
+  handler: async (ctx, args) => {
+    const actor = await requireUserByToken(ctx, args.authToken);
+    const room = await getRoomById(ctx, args.roomId);
+    if (!room) throw new Error("Room not found");
+    assertRoomVisibilityAccess(room, actor);
+    const actorMembership = await requireRoomAdmin(ctx, args.roomId, actor.publicId);
+    const targetMembership = await getRoomMembership(ctx, args.roomId, args.memberId);
+    if (!targetMembership) throw new Error("Member not found");
+    if (targetMembership.role === "owner") throw new Error("Transfer ownership before removing the owner");
+    if (targetMembership.role === "admin" && actorMembership.role !== "owner") throw new Error("Only the owner can remove admins");
+    await removeRoomAccess(ctx, args.roomId, args.memberId);
+    const memberships = await getRoomMemberships(ctx, args.roomId);
+    await ctx.db.patch(room._id, {
+      memberIds: memberships.map((entry: any) => entry.userId),
+      adminIds: (room.adminIds || []).filter((userId: string) => userId !== args.memberId),
+      updatedAt: Date.now(),
+    });
+    return await hydrateRoom(ctx, await getRoomById(ctx, args.roomId), actor.publicId);
+  },
+});
+
+export const updateMemberRole = mutation({
+  args: {
+    authToken: v.string(),
+    roomId: v.string(),
+    memberId: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member")),
+  },
+  handler: async (ctx, args) => {
+    const actor = await requireUserByToken(ctx, args.authToken);
+    const room = await getRoomById(ctx, args.roomId);
+    if (!room) throw new Error("Room not found");
+    assertRoomVisibilityAccess(room, actor);
+    const actorMembership = await requireRoomMembership(ctx, args.roomId, actor.publicId);
+    if (actorMembership.role !== "owner") throw new Error("Only the owner can change admin roles");
+    const targetMembership = await getRoomMembership(ctx, args.roomId, args.memberId);
+    if (!targetMembership) throw new Error("Member not found");
+    if (targetMembership.role === "owner") throw new Error("Transfer ownership before changing the owner");
+    await ctx.db.patch(targetMembership._id, { role: args.role, updatedAt: Date.now() });
+    const adminIds = new Set(room.adminIds || []);
+    if (args.role === "admin") adminIds.add(args.memberId);
+    else adminIds.delete(args.memberId);
+    adminIds.add(room.ownerId);
+    await ctx.db.patch(room._id, { adminIds: [...adminIds], updatedAt: Date.now() });
     return await hydrateRoom(ctx, await getRoomById(ctx, args.roomId), actor.publicId);
   },
 });
@@ -231,6 +295,20 @@ export const update = mutation({
       }
     }
     await ctx.db.patch(room._id, patch);
+    const nextRoom = await getRoomById(ctx, args.roomId);
+    if (nextRoom?.visibility === "power") {
+      const memberships = await getRoomMemberships(ctx, args.roomId);
+      for (const membership of memberships) {
+        const member = await getUserByPublicId(ctx, membership.userId);
+        if (!isPowerUser(member)) await removeRoomAccess(ctx, args.roomId, membership.userId);
+      }
+      const remaining = await getRoomMemberships(ctx, args.roomId);
+      await ctx.db.patch(nextRoom._id, {
+        memberIds: remaining.map((entry: any) => entry.userId),
+        adminIds: (nextRoom.adminIds || []).filter((userId: string) => remaining.some((entry: any) => entry.userId === userId)),
+        updatedAt: Date.now(),
+      });
+    }
     return await hydrateRoom(ctx, await getRoomById(ctx, args.roomId), actor.publicId);
   },
 });

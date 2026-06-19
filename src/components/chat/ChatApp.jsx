@@ -29,11 +29,14 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const currentUser = useQuery(api.auth.me, token ? { authToken: token } : "skip");
   const summaries = useQuery(api.conversations.list, token ? { authToken: token } : "skip") || [];
   const rooms = useQuery(api.rooms.list, token ? { authToken: token } : "skip") || [];
-  const users = useQuery(api.users.list, token ? { authToken: token } : "skip") || [];
+  const friends = useQuery(api.friends.listFriends, token ? { authToken: token } : "skip") || [];
   const capabilities = useQuery(api.access.capabilities, token ? { authToken: token } : "skip") || {};
   const createRoom = useMutation(api.rooms.create);
   const joinByInvite = useMutation(api.rooms.joinByInvite);
   const addMembers = useMutation(api.rooms.addMembers);
+  const removeMember = useMutation(api.rooms.removeMember);
+  const updateMemberRole = useMutation(api.rooms.updateMemberRole);
+  const leaveRoom = useMutation(api.rooms.leave);
   const rotateInviteLink = useMutation(api.rooms.rotateInviteLink);
   const updateRoom = useMutation(api.rooms.update);
   const updateProfile = useMutation(api.users.updateProfile);
@@ -62,18 +65,22 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const [showInfo, setShowInfo] = useState(false);
   const [forwardSource, setForwardSource] = useState(null);
   const [reactionTarget, setReactionTarget] = useState(null);
+  const [messageLimit, setMessageLimit] = useState(160);
   const typingTimerRef = useRef(null);
+  const lastMarkedReadRef = useRef("");
   const { sidebarWidth, isResizing, startResizing } = useSidebarResize();
   const isMobileLayout = useMediaQuery("(max-width: 760px)");
 
   const currentSummary = summaries.find((summary) => summary.conversationId === selected?.conversationId);
   const room = useQuery(api.rooms.get, token && selected?.type === "room" ? { authToken: token, roomId: selected.conversationId } : "skip");
-  const messages = useQuery(api.messages.list, token && selected ? {
+  const messageResult = useQuery(api.messages.list, token && selected ? {
     authToken: token,
     conversationType: selected.type,
     conversationId: selected.conversationId,
-    limit: 160,
-  } : "skip") || [];
+    limit: messageLimit,
+  } : "skip");
+  const messages = messageResult || [];
+  const messagesLoading = selected && messageResult === undefined;
   const typingUsers = useQuery(api.presence.listTyping, token && selected ? {
     authToken: token,
     conversationType: selected.type,
@@ -81,12 +88,12 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   } : "skip") || [];
 
   const presenceIds = useMemo(() => {
-    const ids = new Set(users.map((user) => user.publicId));
+    const ids = new Set(friends.map((user) => user.publicId));
     summaries.forEach((summary) => {
       if (summary.directUserId) ids.add(summary.directUserId);
     });
     return [...ids];
-  }, [summaries, users]);
+  }, [friends, summaries]);
   const presence = useQuery(api.presence.getUsersPresence, token ? { authToken: token, userIds: presenceIds } : "skip") || [];
   const presenceById = useMemo(() => new Map(presence.map((entry) => [entry.userId, entry])), [presence]);
   const routeConversation = useMemo(() => parseConversationRoute(routePath), [routePath]);
@@ -124,7 +131,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
       if (routeConversation.type === "direct" && currentUser) {
         const [first, second] = routeConversation.conversationId.replace(/^direct:/, "").split(":");
         const otherId = first === currentUser.publicId ? second : first;
-        const user = users.find((entry) => entry.publicId === otherId);
+        const user = friends.find((entry) => entry.publicId === otherId);
         if (user) {
           applySelected({ type: "direct", conversationId: routeConversation.conversationId, directUserId: user.publicId, title: getName(user), user });
           return;
@@ -136,7 +143,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
       setSelected({ type: first.type, conversationId: first.conversationId, directUserId: first.directUserId, title: first.title, user: first.user, room: first.room });
       navigate?.(appRouteForSummary(first), { replace: true });
     }
-  }, [currentUser, isMobileLayout, isSettingsRoute, navigate, routeConversation, rooms, routePath, selected, summaries, users]);
+  }, [currentUser, friends, isMobileLayout, isSettingsRoute, navigate, routeConversation, rooms, routePath, selected, summaries]);
 
   useEffect(() => {
     if (!token || !inviteCode || !currentUser) return;
@@ -161,15 +168,9 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   }, [heartbeat, token]);
 
   useEffect(() => {
-    if (!selected || !messages.length) return;
-    const last = messages[messages.length - 1];
-    markRead({
-      authToken: token,
-      conversationType: selected.type,
-      conversationId: selected.conversationId,
-      lastReadMessageId: last.messageId || last._id,
-    }).catch(() => {});
-  }, [markRead, messages, selected?.conversationId, selected?.type, token]);
+    setMessageLimit(160);
+    lastMarkedReadRef.current = "";
+  }, [selected?.conversationId, selected?.type]);
 
   const uploadFiles = useCallback(async (files) => {
     const uploaded = [];
@@ -230,6 +231,9 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
       createdAt: replyTo.createdAt,
     } : undefined;
     if (selected.type === "room") {
+      if (room?.settings?.allowFiles === false && attachments.length > 0) {
+        throw new Error("File attachments are disabled in this room");
+      }
       await sendRoom({ authToken: token, roomId: selected.conversationId, text, attachments, quotedMessage });
     } else {
       await sendDirect({ authToken: token, receiverId: selected.directUserId, text, attachments, quotedMessage });
@@ -258,11 +262,30 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     navigate?.(`/app/chats/${encodeURIComponent(conversationId)}`);
   };
 
-  const filteredMessages = useMemo(() => {
+  const matchedMessageIds = useMemo(() => {
     const query = messageSearch.trim().toLowerCase();
-    if (!query) return messages;
-    return messages.filter((message) => [message.text, message.senderProfile?.fullName].filter(Boolean).join(" ").toLowerCase().includes(query));
+    if (!query) return new Set();
+    return new Set(messages
+      .filter((message) => [message.text, message.senderProfile?.fullName, message.quotedMessage?.text].filter(Boolean).join(" ").toLowerCase().includes(query))
+      .map((message) => message.messageId || message._id));
   }, [messageSearch, messages]);
+
+  const markLastVisibleRead = useCallback((lastMessage) => {
+    if (!selected || !lastMessage) return;
+    const messageId = lastMessage.messageId || lastMessage._id;
+    if (!messageId) return;
+    const readKey = `${selected.type}:${selected.conversationId}:${messageId}`;
+    if (lastMarkedReadRef.current === readKey) return;
+    lastMarkedReadRef.current = readKey;
+    markRead({
+      authToken: token,
+      conversationType: selected.type,
+      conversationId: selected.conversationId,
+      lastReadMessageId: messageId,
+    }).catch(() => {
+      lastMarkedReadRef.current = "";
+    });
+  }, [markRead, selected, token]);
 
   if (currentUser === undefined) {
     return <main className="loading-screen"><span className="loader-orbit" /> Loading Hyperchat...</main>;
@@ -298,7 +321,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
         currentUser={currentUser}
         selected={selected}
         summaries={summaries}
-        users={users}
+        users={friends}
         presenceById={presenceById}
         search={search}
         onSearch={setSearch}
@@ -352,6 +375,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
               <div className="message-search">
                 <Search size={15} />
                 <input value={messageSearch} onChange={(event) => setMessageSearch(event.target.value)} placeholder="Search this chat" autoFocus />
+                {messageSearch.trim() && <span className="message-search-count">{matchedMessageIds.size}</span>}
                 <IconButton title="Close search" onClick={() => { setShowMessageSearch(false); setMessageSearch(""); }}><X size={16} /></IconButton>
               </div>
             )}
@@ -368,9 +392,15 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
                   selected={selected}
                   summary={currentSummary}
                   room={room}
-                  messages={filteredMessages}
+                  messages={messages}
+                  loading={messagesLoading}
+                  canLoadMore={!messagesLoading && messages.length >= messageLimit}
+                  onLoadMore={() => setMessageLimit((current) => Math.min(current + 80, 600))}
+                  searchQuery={messageSearch}
+                  matchedMessageIds={matchedMessageIds}
                   currentUser={currentUser}
                   typingUsers={typingUsers}
+                  onReadLast={markLastVisibleRead}
                   onReply={(message) => { setReplyTo(message); setEditing(null); }}
                   onThread={setThreadRoot}
                   onForward={setForwardSource}
@@ -388,6 +418,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
                   onCancelContext={clearComposerContext}
                   onTyping={startTyping}
                   uploadFiles={uploadFiles}
+                  attachmentsDisabled={selected?.type === "room" && room?.settings?.allowFiles === false}
                 />
               </>
             )}
@@ -402,6 +433,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
           threadRoot={threadRoot}
           onClose={() => setThreadRoot(null)}
           uploadFiles={uploadFiles}
+          attachmentsDisabled={selected?.type === "room" && room?.settings?.allowFiles === false}
         />
       )}
 
@@ -412,9 +444,19 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
           summary={currentSummary}
           room={room}
           currentUser={currentUser}
-          users={users}
+          users={friends}
           onClose={() => setShowInfo(false)}
           onAddMembers={(memberIds) => selected?.type === "room" && addMembers({ authToken: token, roomId: selected.conversationId, memberIds })}
+          onRemoveMember={(memberId) => selected?.type === "room" && removeMember({ authToken: token, roomId: selected.conversationId, memberId })}
+          onUpdateMemberRole={(memberId, role) => selected?.type === "room" && updateMemberRole({ authToken: token, roomId: selected.conversationId, memberId, role })}
+          onLeaveRoom={async () => {
+            if (selected?.type !== "room") return;
+            await leaveRoom({ authToken: token, roomId: selected.conversationId });
+            setShowInfo(false);
+            setThreadRoot(null);
+            setSelected(null);
+            navigate?.("/app", { replace: true });
+          }}
           onUpdateRoom={(patch) => selected?.type === "room" && updateRoom({ authToken: token, roomId: selected.conversationId, ...patch })}
           onRotateInviteLink={() => selected?.type === "room" && rotateInviteLink({ authToken: token, roomId: selected.conversationId })}
           onUpdateSettings={(settings) => updateSettings({ authToken: token, settings })}
@@ -429,7 +471,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
           token={token}
           source={forwardSource}
           summaries={summaries}
-          users={users}
+          users={friends}
           onClose={() => setForwardSource(null)}
         />
       )}
