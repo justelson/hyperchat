@@ -8,5 +8,7 @@ coverage
 test-results
 playwright-report
 *.log
+client_secret*.json
+google-oauth-client*.json
 
 .vercel

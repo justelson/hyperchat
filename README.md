@@ -24,7 +24,15 @@ Hyperchat is a focused Convex + Vite chat app extracted from Monax's one-to-one 
    npm run dev
    ```
 
-4. Validate:
+4. Optional: import Google Sign-In credentials after downloading a Web application OAuth client JSON from Google Cloud:
+
+   ```powershell
+   npm run auth:import-google -- --file "$env:USERPROFILE\Downloads\client_secret_....json"
+   ```
+
+   The importer extracts only the Google client ID, updates `.env.local`, sets `GOOGLE_CLIENT_ID` in Convex dev/prod, and sets `VITE_GOOGLE_CLIENT_ID` in Vercel production/preview/development. Use `--deploy` to redeploy production after the env vars are set.
+
+5. Validate:
 
    ```powershell
    npm run typecheck
@@ -44,5 +52,5 @@ Hyperchat is a focused Convex + Vite chat app extracted from Monax's one-to-one 
 ## Production Notes
 
 - The local MVP uses SHA-256 password hashing to keep the scaffold self-contained. Replace it with a hardened auth provider or stronger password hashing before real user launch.
+- Google Sign-In uses a browser OAuth client ID only. Do not commit the downloaded `client_secret*.json` file; the app does not need the client secret for Google Identity Services ID-token login.
 - Browser push, E2EE, server-side rich link fetching, and external identity providers are intentionally deferred.
-

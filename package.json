@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -p convex/tsconfig.json --noEmit",
+    "auth:import-google": "node scripts/import-google-oauth.mjs",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "convex:codegen": "convex codegen"
