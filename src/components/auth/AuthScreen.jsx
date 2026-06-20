@@ -1,4 +1,4 @@
-import { Chrome, Eye, EyeOff, ImagePlus, Loader2, Lock, Shuffle, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, AtSign, Chrome, Eye, EyeOff, ImagePlus, Loader2, Lock, Shuffle, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -25,6 +25,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [signupStep, setSignupStep] = useState(1);
   const [avatarUpload, setAvatarUpload] = useState({ busy: false, error: "", meta: null });
   const avatarInputRef = useRef(null);
   const login = useMutation(api.auth.login);
@@ -35,6 +36,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
 
   useEffect(() => {
     setError("");
+    setSignupStep(1);
   }, [mode]);
 
   useEffect(() => () => {
@@ -44,6 +46,26 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setError("");
+  };
+
+  const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  const isValidUsername = (value) => /^[a-z0-9_.-]{3,32}$/.test(String(value || "").trim());
+  const isSignupStepOneValid = () =>
+    form.fullName.trim().length >= 2 &&
+    isValidEmail(form.email) &&
+    form.password.length >= 8;
+  const isSignupStepTwoValid = () =>
+    isValidUsername(form.username) &&
+    agreed &&
+    !avatarUpload.busy;
+
+  const continueSignup = () => {
+    if (!isSignupStepOneValid()) {
+      setError("Complete name, email, and password first.");
+      return;
+    }
+    setError("");
+    setSignupStep(2);
   };
 
   const uploadSignupAvatar = async (file) => {
@@ -146,6 +168,14 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   const submit = async (event) => {
     event.preventDefault();
     setError("");
+    if (mode === "signup" && signupStep === 1) {
+      continueSignup();
+      return;
+    }
+    if (mode === "signup" && !isValidUsername(form.username)) {
+      setError("Choose a username with 3 to 32 letters, numbers, dots, dashes, or underscores.");
+      return;
+    }
     if (mode === "signup" && !agreed) {
       setError("Accept the account terms to create your account.");
       return;
@@ -160,7 +190,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
         ? await login({ email: form.email, password: form.password })
         : await signUp({
           fullName: form.fullName,
-          username: form.username || undefined,
+          username: form.username.trim() || undefined,
           email: form.email,
           password: form.password,
           avatarSeed: form.avatarSeed,
@@ -204,7 +234,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
             <span className="auth-form-icon">{mode === "login" ? <Lock size={21} /> : <User size={21} />}</span>
             <div>
               <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
-              <p>{mode === "login" ? "Continue to your conversations." : "Set up your Hyperchat identity."}</p>
+              <p>{mode === "login" ? "Continue to your conversations." : signupStep === 1 ? "Let's get started with your basic info." : "Complete your profile setup."}</p>
             </div>
           </div>
 
@@ -213,18 +243,28 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
             <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => navigate?.("/auth/sign-up")}>Create</button>
           </div>
 
-          <button
-            type="button"
-            className="secondary-button google-button"
-            disabled={busy || !googleClientId}
-            onClick={signInWithGoogle}
-            title={googleClientId ? "Continue with Google" : "Set VITE_GOOGLE_CLIENT_ID and GOOGLE_CLIENT_ID"}
-          >
-            <Chrome size={17} />
-            Continue with Google
-          </button>
-
           {mode === "signup" && (
+            <div className="auth-stepper" aria-label={`Create account step ${signupStep} of 2`}>
+              <span className={`auth-step-node ${signupStep >= 1 ? "active" : ""}`}>1</span>
+              <span className={`auth-step-line ${signupStep >= 2 ? "active" : ""}`} />
+              <span className={`auth-step-node ${signupStep >= 2 ? "active" : ""}`}>2</span>
+            </div>
+          )}
+
+          {(mode === "login" || signupStep === 1) && (
+            <button
+              type="button"
+              className="secondary-button google-button"
+              disabled={busy || !googleClientId}
+              onClick={signInWithGoogle}
+              title={googleClientId ? "Continue with Google" : "Set VITE_GOOGLE_CLIENT_ID and GOOGLE_CLIENT_ID"}
+            >
+              <Chrome size={17} />
+              Continue with Google
+            </button>
+          )}
+
+          {mode === "signup" && signupStep === 2 && (
             <>
               <div className="signup-avatar-row">
                 <Avatar entity={{ fullName: form.fullName || form.username || "Hyperchat", avatarSeed: form.avatarSeed, avatarStyle: form.avatarStyle, profilePic: form.profilePic }} size="lg" />
@@ -262,47 +302,81 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
                 </div>
               </div>
               <label>
-                <span>Name</span>
-                <input value={form.fullName} onChange={(event) => updateField("fullName", event.target.value)} autoComplete="name" required />
-              </label>
-              <label>
                 <span>Username</span>
-                <input value={form.username} onChange={(event) => updateField("username", event.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ""))} autoComplete="username" />
+                <span className="input-with-icon">
+                  <AtSign size={16} />
+                  <input value={form.username} onChange={(event) => updateField("username", event.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ""))} autoComplete="username" required />
+                </span>
               </label>
+              {form.username && !isValidUsername(form.username) && (
+                <p className="signup-hints">Username must be 3-32 characters using letters, numbers, dots, dashes, or underscores.</p>
+              )}
             </>
           )}
 
-          <label>
-            <span>Email</span>
-            <input value={form.email} onChange={(event) => updateField("email", event.target.value)} type="email" autoComplete="email" required />
-          </label>
-          <label>
-            <span>Password</span>
-            <span className="password-field">
-              <input
-                value={form.password}
-                onChange={(event) => updateField("password", event.target.value)}
-                type={showPassword ? "text" : "password"}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                required
-                minLength={8}
-              />
-              <IconButton title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((value) => !value)}>
-                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-              </IconButton>
-            </span>
-          </label>
+          {(mode === "login" || signupStep === 1) && (
+            <>
+              {mode === "signup" && (
+                <label>
+                  <span>Name</span>
+                  <input value={form.fullName} onChange={(event) => updateField("fullName", event.target.value)} autoComplete="name" required />
+                </label>
+              )}
+              <label>
+                <span>Email</span>
+                <input value={form.email} onChange={(event) => updateField("email", event.target.value)} type="email" autoComplete="email" required />
+              </label>
+              <label>
+                <span>Password</span>
+                <span className="password-field">
+                  <input
+                    value={form.password}
+                    onChange={(event) => updateField("password", event.target.value)}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    required
+                    minLength={8}
+                  />
+                  <IconButton title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((value) => !value)}>
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </IconButton>
+                </span>
+              </label>
+              {mode === "signup" && !isSignupStepOneValid() && (form.fullName || form.email || form.password) && (
+                <div className="signup-hints">
+                  {form.fullName && form.fullName.trim().length < 2 && <p>Name must be at least 2 characters.</p>}
+                  {form.email && !isValidEmail(form.email) && <p>Enter a valid email address.</p>}
+                  {form.password && form.password.length < 8 && <p>Password must be at least 8 characters.</p>}
+                </div>
+              )}
+            </>
+          )}
 
-          {mode === "signup" && (
+          {mode === "signup" && signupStep === 2 && (
             <CheckboxRow checked={agreed} onChange={setAgreed}>
               I agree to keep this account accurate and private.
             </CheckboxRow>
           )}
 
           {error && <p className="form-error">{error}</p>}
-          <button className="primary-button" disabled={busy || avatarUpload.busy}>
-            {busy ? <><Loader2 size={17} className="spin" /> {mode === "login" ? "Signing in..." : "Creating..."}</> : mode === "login" ? "Sign in" : "Create account"}
-          </button>
+          {mode === "login" ? (
+            <button className="primary-button" disabled={busy}>
+              {busy ? <><Loader2 size={17} className="spin" /> Signing in...</> : "Sign in"}
+            </button>
+          ) : signupStep === 1 ? (
+            <button type="button" className="primary-button" disabled={!isSignupStepOneValid()} onClick={continueSignup}>
+              Continue <ArrowRight size={16} />
+            </button>
+          ) : (
+            <div className="signup-action-row">
+              <button type="button" className="secondary-button" onClick={() => { setError(""); setSignupStep(1); }} disabled={busy}>
+                <ArrowLeft size={16} /> Back
+              </button>
+              <button className="primary-button" disabled={busy || !isSignupStepTwoValid()}>
+                {busy ? <><Loader2 size={17} className="spin" /> Creating...</> : <><span>Create account</span><ArrowRight size={16} /></>}
+              </button>
+            </div>
+          )}
           <p className="auth-switch-copy">
             {mode === "login" ? "Need an account?" : "Already have an account?"}{" "}
             <button type="button" onClick={() => navigate?.(mode === "login" ? "/auth/sign-up" : "/auth/sign-in")}>
