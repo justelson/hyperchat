@@ -106,6 +106,11 @@ export const displayError = (err, fallback = "Could not complete that action") =
     "Google sign-in is not configured",
     "Google sign-in failed",
     "Google email is not verified",
+    "Choose an image file",
+    "Choose an image under 12 MB",
+    "Uploaded photo is not available",
+    "Avatar upload failed",
+    "Wait for the avatar upload to finish",
   ].find((message) => raw.includes(message));
   if (knownMessage) return knownMessage;
   const uncaught = lines.find((line) => line.includes("Uncaught Error:"));

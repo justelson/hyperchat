@@ -1,9 +1,10 @@
-import { Chrome, Eye, EyeOff, Loader2, Lock, Shuffle, User } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Chrome, Eye, EyeOff, ImagePlus, Loader2, Lock, Shuffle, User } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AVATAR_STYLES, TOKEN_KEY } from "../../lib/chatConstants";
 import { createAvatarSeed, displayError } from "../../lib/chatUtils";
+import { compressAvatarImage } from "../../lib/imageUpload";
 import { Avatar } from "../common/Avatar";
 import { CheckboxRow } from "../common/FormControls";
 import { IconButton } from "../common/IconButton";
@@ -17,13 +18,18 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
     password: "",
     avatarSeed: createAvatarSeed(),
     avatarStyle: "adventurer-neutral",
+    profilePic: "",
+    profilePicStorageId: "",
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [avatarUpload, setAvatarUpload] = useState({ busy: false, error: "", meta: null });
+  const avatarInputRef = useRef(null);
   const login = useMutation(api.auth.login);
   const signUp = useMutation(api.auth.signUp);
+  const generateSignupAvatarUploadUrl = useMutation(api.files.generateSignupAvatarUploadUrl);
   const googleLogin = useAction(api.auth.googleLogin);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
@@ -31,9 +37,43 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
     setError("");
   }, [mode]);
 
+  useEffect(() => () => {
+    if (form.profilePic?.startsWith("blob:")) URL.revokeObjectURL(form.profilePic);
+  }, [form.profilePic]);
+
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setError("");
+  };
+
+  const uploadSignupAvatar = async (file) => {
+    if (!file) return;
+    let nextPreview = "";
+    setAvatarUpload({ busy: true, error: "", meta: null });
+    setError("");
+    try {
+      const compressed = await compressAvatarImage(file);
+      nextPreview = compressed.previewUrl;
+      const uploadUrl = await generateSignupAvatarUploadUrl({});
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": compressed.file.type || "image/webp" },
+        body: compressed.file,
+      });
+      if (!response.ok) throw new Error("Avatar upload failed");
+      const { storageId } = await response.json();
+      setForm((current) => ({
+        ...current,
+        profilePic: compressed.previewUrl,
+        profilePicStorageId: storageId,
+      }));
+      setAvatarUpload({ busy: false, error: "", meta: { size: compressed.size } });
+    } catch (err) {
+      if (nextPreview) URL.revokeObjectURL(nextPreview);
+      const message = displayError(err, "Avatar upload failed");
+      setAvatarUpload({ busy: false, error: message, meta: null });
+      setError(message);
+    }
   };
 
   const finishAuth = (result, fallback = "Could not sign in") => {
@@ -110,6 +150,10 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
       setError("Accept the account terms to create your account.");
       return;
     }
+    if (mode === "signup" && avatarUpload.busy) {
+      setError("Wait for the avatar upload to finish.");
+      return;
+    }
     setBusy(true);
     try {
       const result = mode === "login"
@@ -121,6 +165,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           password: form.password,
           avatarSeed: form.avatarSeed,
           avatarStyle: form.avatarStyle,
+          profilePicStorageId: form.profilePicStorageId || undefined,
         });
 
       finishAuth(result, mode === "login" ? "Invalid email or password" : "Could not create account");
@@ -134,12 +179,8 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
   return (
     <main className="auth-screen">
       <section className="auth-side">
-        <div className="auth-brand">
-          <span className="brand-mark">H</span>
-          <div>
-            <h1>Hyperchat</h1>
-            <p>Direct chats and rooms, kept focused.</p>
-          </div>
+        <div className="auth-brand auth-logo-lockup">
+          <img className="auth-logo" src="/brand/hyperchat-logo.svg" alt="Hyperchat" />
         </div>
         <div className="auth-preview" aria-hidden="true">
           <div className="auth-bubble auth-bubble-a">
@@ -186,17 +227,38 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           {mode === "signup" && (
             <>
               <div className="signup-avatar-row">
-                <Avatar entity={{ fullName: form.fullName || form.username || "Hyperchat", avatarSeed: form.avatarSeed, avatarStyle: form.avatarStyle }} size="lg" />
+                <Avatar entity={{ fullName: form.fullName || form.username || "Hyperchat", avatarSeed: form.avatarSeed, avatarStyle: form.avatarStyle, profilePic: form.profilePic }} size="lg" />
                 <div className="avatar-style-controls">
                   <span>Fallback avatar</span>
                   <div>
                     <select value={form.avatarStyle} onChange={(event) => updateField("avatarStyle", event.target.value)}>
                       {AVATAR_STYLES.map((style) => <option key={style.value} value={style.value}>{style.label}</option>)}
                     </select>
-                    <button type="button" className="secondary-button tiny" onClick={() => updateField("avatarSeed", createAvatarSeed())}>
+                    <button type="button" className="secondary-button tiny" onClick={() => updateField("avatarSeed", createAvatarSeed())} disabled={avatarUpload.busy}>
                       <Shuffle size={13} /> Shuffle
                     </button>
+                    <input
+                      ref={avatarInputRef}
+                      className="avatar-upload-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        uploadSignupAvatar(event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button tiny avatar-upload-button"
+                      title="Upload avatar"
+                      aria-label="Upload avatar"
+                      disabled={avatarUpload.busy}
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      {avatarUpload.busy ? <Loader2 size={13} className="spin" /> : <ImagePlus size={14} />}
+                    </button>
                   </div>
+                  {avatarUpload.error && <small className="avatar-upload-note error">{avatarUpload.error}</small>}
                 </div>
               </div>
               <label>
@@ -238,7 +300,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           )}
 
           {error && <p className="form-error">{error}</p>}
-          <button className="primary-button" disabled={busy}>
+          <button className="primary-button" disabled={busy || avatarUpload.busy}>
             {busy ? <><Loader2 size={17} className="spin" /> {mode === "login" ? "Signing in..." : "Creating..."}</> : mode === "login" ? "Sign in" : "Create account"}
           </button>
           <p className="auth-switch-copy">

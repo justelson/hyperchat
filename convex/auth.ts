@@ -51,6 +51,7 @@ export const signUp = mutation({
     username: v.optional(v.string()),
     avatarSeed: v.optional(v.string()),
     avatarStyle: v.optional(v.string()),
+    profilePicStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const email = normalizeEmail(args.email);
@@ -75,6 +76,8 @@ export const signUp = mutation({
     const publicId = makeId("user");
     const avatarSeed = normalizeText(args.avatarSeed).slice(0, 80) || publicId;
     const avatarStyle = normalizeAvatarStyle(args.avatarStyle);
+    const profilePic = args.profilePicStorageId ? await ctx.storage.getUrl(args.profilePicStorageId) : "";
+    if (args.profilePicStorageId && !profilePic) return authError("Uploaded photo is not available");
     const docId = await ctx.db.insert("users", {
       publicId,
       email,
@@ -82,6 +85,8 @@ export const signUp = mutation({
       fullName,
       username,
       avatarColor: avatarColors[Math.floor(Math.random() * avatarColors.length)],
+      profilePic,
+      profilePicStorageId: args.profilePicStorageId,
       avatarSeed,
       avatarStyle,
       authProvider: "password",

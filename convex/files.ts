@@ -11,6 +11,11 @@ export const generateUploadUrl = mutation({
   },
 });
 
+export const generateSignupAvatarUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => await ctx.storage.generateUploadUrl(),
+});
+
 export const getUrl = query({
   args: { authToken: v.string(), storageId: v.id("_storage") },
   handler: async (ctx, args) => {
