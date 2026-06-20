@@ -77,7 +77,7 @@ export function SettingsPage({
         <Avatar entity={currentUser} size="lg" online />
         <div>
           <h2>{getName(currentUser)}</h2>
-          <p>{currentUser?.username ? `@${currentUser.username}` : currentUser?.email || "Hyperchat account"}</p>
+          <p>{currentUser?.username ? `@${currentUser.username}` : currentUser?.email || "Hyper Chat account"}</p>
         </div>
       </div>
       <div className="settings-home-grid">

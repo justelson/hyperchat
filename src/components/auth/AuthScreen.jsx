@@ -210,7 +210,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
     <main className="auth-screen">
       <section className="auth-side">
         <div className="auth-brand auth-logo-lockup">
-          <img className="auth-logo" src="/brand/hyperchat-logo.svg" alt="Hyperchat" />
+          <img className="auth-logo" src="/brand/hyperchat-logo.svg" alt="Hyper Chat" />
         </div>
         <div className="auth-preview" aria-hidden="true">
           <div className="auth-bubble auth-bubble-a">
@@ -267,7 +267,7 @@ export function AuthScreen({ onToken, routePath = "/auth/sign-in", navigate }) {
           {mode === "signup" && signupStep === 2 && (
             <>
               <div className="signup-avatar-row">
-                <Avatar entity={{ fullName: form.fullName || form.username || "Hyperchat", avatarSeed: form.avatarSeed, avatarStyle: form.avatarStyle, profilePic: form.profilePic }} size="lg" />
+                <Avatar entity={{ fullName: form.fullName || form.username || "Hyper Chat", avatarSeed: form.avatarSeed, avatarStyle: form.avatarStyle, profilePic: form.profilePic }} size="lg" />
                 <div className="avatar-style-controls">
                   <span>Fallback avatar</span>
                   <div>

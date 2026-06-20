@@ -10,8 +10,8 @@ function MissingConvexConfig() {
   return (
     <main className="config-screen">
       <section className="config-panel">
-        <span className="brand-logo-mask config-logo" role="img" aria-label="Hyperchat" />
-        <h1>Hyperchat needs a Convex deployment</h1>
+        <span className="brand-logo-mask config-logo" role="img" aria-label="Hyper Chat" />
+        <h1>Hyper Chat needs a Convex deployment</h1>
         <p>Run <code>npx convex dev</code> in this repo, then restart <code>npm run dev</code>.</p>
         <div className="command-stack">
           <code>npm install</code>

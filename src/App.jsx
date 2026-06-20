@@ -20,7 +20,7 @@ function MissingPage({ navigate }) {
       <section>
         <span>404</span>
         <h1>Page not found</h1>
-        <p>This Hyperchat route does not exist.</p>
+        <p>This Hyper Chat route does not exist.</p>
         <button type="button" className="primary-button" onClick={() => navigate?.("/app", { replace: true })}>Back to chats</button>
       </section>
     </main>

@@ -320,7 +320,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   }, [directAccessBlocked, markRead, selected, token]);
 
   if (currentUser === undefined) {
-    return <main className="loading-screen"><span className="loader-orbit" /> Loading Hyperchat...</main>;
+    return <main className="loading-screen"><span className="loader-orbit" /> Loading Hyper Chat...</main>;
   }
 
   if (!currentUser) {

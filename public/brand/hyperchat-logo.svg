@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 176" role="img" aria-labelledby="title desc">
-  <title id="title">Hyperchat</title>
-  <desc id="desc">Hyperchat vector logo based on the phone-linked hyper mark.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 930 176" role="img" aria-labelledby="title desc">
+  <title id="title">Hyper Chat</title>
+  <desc id="desc">Hyper Chat vector logo based on the phone-linked hyper mark.</desc>
   <g fill="#fffaf2">
     <path transform="translate(0 15) scale(0.52)" d="M160 31h63c7 0 11 7 8 13l-50 84c-2 4 0 7 5 8l10 1c5 1 9 4 12 9l47 88c3 6-1 12-8 12h-57c-5 0-8-2-11-7l-31-56c-3-6-7-7-12-1l-41 58c-3 4-7 6-12 6H34c-8 0-12-8-8-14L153 36c2-3 4-5 7-5Z" />
-    <text x="170" y="122" font-family="Bricolage Hyper, Inter, Arial, sans-serif" font-size="112" font-weight="800">hyper</text>
+    <text x="170" y="122" font-family="Bricolage Hyper, Inter, Arial, sans-serif" font-size="108" font-weight="800">hyper-chat</text>
   </g>
 </svg>

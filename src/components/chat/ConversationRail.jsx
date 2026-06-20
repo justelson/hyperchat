@@ -131,9 +131,8 @@ export function ConversationRail({
   return (
     <aside className="conversation-rail">
       <header className="rail-header">
-        <div className="rail-title rail-title-branded">
-          <span className="brand-logo-mask rail-brand-logo" role="img" aria-label="Hyperchat" />
-          <small>Chats and rooms</small>
+        <div className="rail-title">
+          <span className="brand-logo-mask rail-brand-logo" role="img" aria-label="Hyper Chat" />
         </div>
         <div className="rail-actions">
           <IconButton title="New chat" onClick={() => setShowNewChat(true)}><Plus size={18} /></IconButton>
