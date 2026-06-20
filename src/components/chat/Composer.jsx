@@ -14,6 +14,7 @@ export function Composer({
   onTyping,
   uploadFiles,
   attachmentsDisabled = false,
+  disabledReason = "",
 }) {
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -36,6 +37,10 @@ export function Composer({
 
   const submit = async () => {
     if (busy) return;
+    if (disabledReason) {
+      setError(disabledReason);
+      return;
+    }
     const text = value.trim();
     if (!text && files.length === 0) return;
     setBusy(true);
@@ -61,6 +66,12 @@ export function Composer({
 
   const addFiles = (event) => {
     const picked = Array.from(event.target.files || []);
+    if (disabledReason && picked.length) {
+      setError(disabledReason);
+      event.target.value = "";
+      setShowAttach(false);
+      return;
+    }
     if (attachmentsDisabled && picked.length) {
       setError("File attachments are disabled in this room");
       event.target.value = "";
@@ -75,6 +86,11 @@ export function Composer({
   const addPastedFiles = (event) => {
     const picked = Array.from(event.clipboardData?.files || []);
     if (!picked.length) return;
+    if (disabledReason) {
+      setError(disabledReason);
+      event.preventDefault();
+      return;
+    }
     if (attachmentsDisabled) {
       setError("File attachments are disabled in this room");
       event.preventDefault();
@@ -109,8 +125,8 @@ export function Composer({
           <button
             type="button"
             className="composer-tool attachment-trigger"
-            disabled={attachmentsDisabled}
-            onClick={() => attachmentsDisabled ? setError("File attachments are disabled in this room") : setShowAttach((current) => !current)}
+            disabled={Boolean(disabledReason) || attachmentsDisabled}
+            onClick={() => disabledReason ? setError(disabledReason) : attachmentsDisabled ? setError("File attachments are disabled in this room") : setShowAttach((current) => !current)}
           >
             <Paperclip size={19} />
           </button>
@@ -125,14 +141,15 @@ export function Composer({
         <textarea
           ref={inputRef}
           value={value}
+          disabled={Boolean(disabledReason)}
           onChange={(event) => { onChange(event.target.value); onTyping?.(); }}
           onKeyDown={handleKeyDown}
           onPaste={addPastedFiles}
-          placeholder={editing ? "Edit message" : "Message"}
+          placeholder={disabledReason || (editing ? "Edit message" : "Message")}
           rows={1}
         />
         <div className="emoji-menu-wrap">
-          <button type="button" className={`composer-tool ${showEmoji ? "active" : ""}`} onClick={() => setShowEmoji((value) => !value)}>
+          <button type="button" className={`composer-tool ${showEmoji ? "active" : ""}`} disabled={Boolean(disabledReason)} onClick={() => setShowEmoji((value) => !value)}>
             <Smile size={19} />
           </button>
           {showEmoji && (
@@ -141,7 +158,7 @@ export function Composer({
             </div>
           )}
         </div>
-        <button type="button" className="send-button" disabled={busy || (!value.trim() && files.length === 0)} onClick={submit}>
+        <button type="button" className="send-button" disabled={Boolean(disabledReason) || busy || (!value.trim() && files.length === 0)} onClick={submit}>
           {busy ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
         </button>
       </div>

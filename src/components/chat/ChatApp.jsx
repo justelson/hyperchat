@@ -72,16 +72,19 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const isMobileLayout = useMediaQuery("(max-width: 760px)");
 
   const currentSummary = summaries.find((summary) => summary.conversationId === selected?.conversationId);
+  const directAccessBlocked = selected?.type === "direct" && (selected.canMessage === false || currentSummary?.canMessage === false);
+  const directAccessReason = currentSummary?.accessReason || selected?.accessReason || "Add this person as a friend before messaging";
+  const canUseSelectedConversation = Boolean(selected && !directAccessBlocked);
   const room = useQuery(api.rooms.get, token && selected?.type === "room" ? { authToken: token, roomId: selected.conversationId } : "skip");
-  const messageResult = useQuery(api.messages.list, token && selected ? {
+  const messageResult = useQuery(api.messages.list, token && canUseSelectedConversation ? {
     authToken: token,
     conversationType: selected.type,
     conversationId: selected.conversationId,
     limit: messageLimit,
   } : "skip");
   const messages = messageResult || [];
-  const messagesLoading = selected && messageResult === undefined;
-  const typingUsers = useQuery(api.presence.listTyping, token && selected ? {
+  const messagesLoading = canUseSelectedConversation && messageResult === undefined;
+  const typingUsers = useQuery(api.presence.listTyping, token && canUseSelectedConversation ? {
     authToken: token,
     conversationType: selected.type,
     conversationId: selected.conversationId,
@@ -118,7 +121,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     if (routeConversation) {
       const summary = summaries.find((entry) => entry.conversationId === routeConversation.conversationId);
       if (summary) {
-        applySelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room });
+        applySelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room, canMessage: summary.canMessage, accessReason: summary.accessReason });
         return;
       }
       if (routeConversation.type === "room") {
@@ -133,14 +136,14 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
         const otherId = first === currentUser.publicId ? second : first;
         const user = friends.find((entry) => entry.publicId === otherId);
         if (user) {
-          applySelected({ type: "direct", conversationId: routeConversation.conversationId, directUserId: user.publicId, title: getName(user), user });
+          applySelected({ type: "direct", conversationId: routeConversation.conversationId, directUserId: user.publicId, title: getName(user), user, canMessage: true });
           return;
         }
       }
     }
     if (!selected && !isMobileLayout && summaries.length > 0 && routePath === "/app") {
       const first = summaries[0];
-      setSelected({ type: first.type, conversationId: first.conversationId, directUserId: first.directUserId, title: first.title, user: first.user, room: first.room });
+      setSelected({ type: first.type, conversationId: first.conversationId, directUserId: first.directUserId, title: first.title, user: first.user, room: first.room, canMessage: first.canMessage, accessReason: first.accessReason });
       navigate?.(appRouteForSummary(first), { replace: true });
     }
   }, [currentUser, friends, isMobileLayout, isSettingsRoute, navigate, routeConversation, rooms, routePath, selected, summaries]);
@@ -202,13 +205,13 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   }, [generateUploadUrl, token, updateProfilePhoto]);
 
   const startTyping = useCallback(() => {
-    if (!selected || currentUser?.settings?.typingIndicator === false) return;
+    if (!selected || directAccessBlocked || currentUser?.settings?.typingIndicator === false) return;
     setTyping({ authToken: token, conversationType: selected.type, conversationId: selected.conversationId, isTyping: true }).catch(() => {});
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
       setTyping({ authToken: token, conversationType: selected.type, conversationId: selected.conversationId, isTyping: false }).catch(() => {});
     }, 1600);
-  }, [currentUser?.settings?.typingIndicator, selected, setTyping, token]);
+  }, [currentUser?.settings?.typingIndicator, directAccessBlocked, selected, setTyping, token]);
 
   const clearComposerContext = () => {
     setReplyTo(null);
@@ -218,6 +221,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
 
   const sendCurrentMessage = async (text, attachments = []) => {
     if (!selected) return;
+    if (directAccessBlocked) throw new Error(directAccessReason);
     if (editing) {
       await editMessage({ authToken: token, messageId: editing.messageId || editing._id, text });
       setEditing(null);
@@ -243,7 +247,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   };
 
   const selectSummary = (summary) => {
-    setSelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room });
+    setSelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room, canMessage: summary.canMessage, accessReason: summary.accessReason });
     setThreadRoot(null);
     setShowInfo(false);
     navigate?.(appRouteForSummary(summary));
@@ -257,6 +261,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
       directUserId: user.publicId,
       title: getName(user),
       user,
+      canMessage: true,
     });
     setThreadRoot(null);
     navigate?.(`/app/chats/${encodeURIComponent(conversationId)}`);
@@ -271,7 +276,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   }, [messageSearch, messages]);
 
   const markLastVisibleRead = useCallback((lastMessage) => {
-    if (!selected || !lastMessage) return;
+    if (!selected || directAccessBlocked || !lastMessage) return;
     const messageId = lastMessage.messageId || lastMessage._id;
     if (!messageId) return;
     const readKey = `${selected.type}:${selected.conversationId}:${messageId}`;
@@ -285,7 +290,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     }).catch(() => {
       lastMarkedReadRef.current = "";
     });
-  }, [markRead, selected, token]);
+  }, [directAccessBlocked, markRead, selected, token]);
 
   if (currentUser === undefined) {
     return <main className="loading-screen"><span className="loader-orbit" /> Loading Hyperchat...</main>;
@@ -395,6 +400,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
                   messages={messages}
                   loading={messagesLoading}
                   canLoadMore={!messagesLoading && messages.length >= messageLimit}
+                  lockedReason={directAccessBlocked ? directAccessReason : ""}
                   onLoadMore={() => setMessageLimit((current) => Math.min(current + 80, 600))}
                   searchQuery={messageSearch}
                   matchedMessageIds={matchedMessageIds}
@@ -419,6 +425,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
                   onTyping={startTyping}
                   uploadFiles={uploadFiles}
                   attachmentsDisabled={selected?.type === "room" && room?.settings?.allowFiles === false}
+                  disabledReason={directAccessBlocked ? directAccessReason : ""}
                 />
               </>
             )}

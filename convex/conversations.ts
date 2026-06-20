@@ -3,9 +3,14 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { compactUser, directConversationId } from "./ids";
 import { getUserByPublicId, requireUserByToken } from "./authSessions";
-import { ensureConversationSummary, getRoomById, hydrateRoom, parseDirectConversation } from "./chatHelpers";
+import { areFriends, ensureConversationSummary, getRoomById, hydrateRoom, parseDirectConversation } from "./chatHelpers";
 
-const hydrateSummary = async (ctx: any, summary: any, viewerId: string) => {
+const isBlockedBetween = (viewer: any, other: any) =>
+  (viewer?.blockedUserIds || []).includes(other?.publicId) || (other?.blockedUserIds || []).includes(viewer?.publicId);
+
+const hydrateSummary = async (ctx: any, summary: any, viewer: any) => {
+  const viewerId = typeof viewer === "string" ? viewer : viewer?.publicId;
+  const viewerDoc = typeof viewer === "string" ? await getUserByPublicId(ctx, viewerId) : viewer;
   const preference = await ctx.db
     .query("conversationpreferences")
     .withIndex("by_user_conversation", (q: any) => q.eq("userId", viewerId).eq("conversationId", summary.conversationId))
@@ -14,6 +19,9 @@ const hydrateSummary = async (ctx: any, summary: any, viewerId: string) => {
   if (summary.type === "direct") {
     const otherId = parseDirectConversation(summary.conversationId).find((id) => id !== viewerId);
     const other = await getUserByPublicId(ctx, otherId);
+    const blocked = isBlockedBetween(viewerDoc, other);
+    const friendshipOk = other ? await areFriends(ctx, viewerId, other.publicId) : false;
+    const canMessage = Boolean(other && friendshipOk && !blocked);
     return {
       ...summary,
       _id: summary.conversationId,
@@ -21,6 +29,12 @@ const hydrateSummary = async (ctx: any, summary: any, viewerId: string) => {
       title: other?.fullName || "Unknown",
       directUserId: other?.publicId || otherId,
       user: compactUser(other),
+      canMessage,
+      accessReason: canMessage
+        ? undefined
+        : blocked
+          ? "You cannot contact this user"
+          : "Add this person as a friend before messaging",
       pinned: Boolean(preference?.pinned),
       muted: Boolean(preference?.muted),
       archived: Boolean(preference?.archived),
@@ -52,7 +66,7 @@ export const list = query({
       .query("conversationsummaries")
       .withIndex("by_user", (q: any) => q.eq("userId", viewer.publicId))
       .collect();
-    const hydrated = await Promise.all(summaries.map((summary: any) => hydrateSummary(ctx, summary, viewer.publicId)));
+    const hydrated = await Promise.all(summaries.map((summary: any) => hydrateSummary(ctx, summary, viewer)));
     return hydrated
       .filter((summary: any) => (args.type ? summary.type === args.type : true))
       .filter((summary: any) => (args.includeArchived ? true : !summary.archived))
@@ -71,7 +85,7 @@ export const getDirect = query({
     if (!other) return null;
     const conversationId = directConversationId(viewer.publicId, other.publicId);
     const summary = await ensureConversationSummary(ctx, viewer.publicId, conversationId, "direct");
-    return await hydrateSummary(ctx, summary, viewer.publicId);
+    return await hydrateSummary(ctx, summary, viewer);
   },
 });
 

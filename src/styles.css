@@ -5192,6 +5192,19 @@ label,
   font-weight: 700;
 }
 
+.conversation-lock {
+  align-self: center;
+  max-width: min(420px, 92%);
+  border: 1px solid color-mix(in srgb, var(--color-sparkle-primary) 22%, var(--color-sparkle-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-sparkle-card) 86%, transparent);
+  color: var(--color-sparkle-text-secondary);
+  padding: 10px 13px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .load-earlier-button {
   cursor: pointer;
 }
@@ -5208,7 +5221,9 @@ label,
     0 10px 26px rgba(26, 22, 16, 0.12);
 }
 
-.composer-tool:disabled {
+.composer-tool:disabled,
+.composer textarea:disabled,
+.send-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
 }

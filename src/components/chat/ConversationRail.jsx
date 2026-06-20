@@ -27,8 +27,11 @@ function ConversationTypeBadge({ type }) {
 function ConversationItem({ summary, selected, currentUser, presenceById, onSelect }) {
   const entity = conversationEntity(summary);
   const isRoom = summary.type === "room";
+  const isLocked = !isRoom && summary.canMessage === false;
   const unread = Number(summary.unreadCount || 0) > 0;
-  const lastText = summary.lastMessage?.text || (summary.isDraft ? "Ready to message" : isRoom ? `${summary.room?.memberCount || 0} members` : "No messages yet");
+  const lastText = isLocked
+    ? summary.accessReason || "Add this person as a friend before messaging"
+    : summary.lastMessage?.text || (summary.isDraft ? "Ready to message" : isRoom ? `${summary.room?.memberCount || 0} members` : "No messages yet");
   const lastPrefix = summary.lastMessage?.senderId === currentUser?.publicId ? "You: " : "";
   const isOnline = !isRoom && presenceById?.get(summary.directUserId)?.isOnline;
 

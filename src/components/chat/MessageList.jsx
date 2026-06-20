@@ -36,6 +36,7 @@ export function MessageList({
   onReaction,
   onViewReactions,
   typingUsers,
+  lockedReason,
 }) {
   const rows = useMemo(() => groupWithDates(messages), [messages]);
   const listRef = useRef(null);
@@ -102,6 +103,7 @@ export function MessageList({
           </button>
         )}
         {loading && <div className="message-loading-row">Loading messages...</div>}
+        {lockedReason && <div className="conversation-lock">{lockedReason}</div>}
         {rows.map((row, index) => row.type === "date" ? (
           <div className="date-separator" key={row.id}>{row.label}</div>
         ) : (
