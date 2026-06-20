@@ -6,6 +6,7 @@ import { DEFAULT_ACCENT, TOKEN_KEY } from "../../lib/chatConstants";
 import {
   appRouteForSummary,
   directConversationId,
+  displayError,
   getName,
   getSettingsSectionFromPath,
   normalizeVisualSettings,
@@ -49,6 +50,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const deleteMessage = useMutation(api.messages.remove);
   const reactMessage = useMutation(api.messages.toggleReaction);
   const markRead = useMutation(api.messages.markConversationRead);
+  const restoreFriendship = useMutation(api.friends.restoreFromConversation);
   const setPreference = useMutation(api.conversations.setPreference);
   const heartbeat = useMutation(api.presence.heartbeat);
   const setTyping = useMutation(api.presence.setTyping);
@@ -66,14 +68,17 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   const [forwardSource, setForwardSource] = useState(null);
   const [reactionTarget, setReactionTarget] = useState(null);
   const [messageLimit, setMessageLimit] = useState(160);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
   const typingTimerRef = useRef(null);
   const lastMarkedReadRef = useRef("");
   const { sidebarWidth, isResizing, startResizing } = useSidebarResize();
   const isMobileLayout = useMediaQuery("(max-width: 760px)");
 
   const currentSummary = summaries.find((summary) => summary.conversationId === selected?.conversationId);
-  const directAccessBlocked = selected?.type === "direct" && (selected.canMessage === false || currentSummary?.canMessage === false);
+  const directAccessBlocked = selected?.type === "direct" && (selected.canMessage === false || (selected.canMessage !== true && currentSummary?.canMessage === false));
   const directAccessReason = currentSummary?.accessReason || selected?.accessReason || "Add this person as a friend before messaging";
+  const canRestoreFriendship = Boolean(directAccessBlocked && (currentSummary?.canRestoreFriendship || selected?.canRestoreFriendship));
   const canUseSelectedConversation = Boolean(selected && !directAccessBlocked);
   const room = useQuery(api.rooms.get, token && selected?.type === "room" ? { authToken: token, roomId: selected.conversationId } : "skip");
   const messageResult = useQuery(api.messages.list, token && canUseSelectedConversation ? {
@@ -121,7 +126,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     if (routeConversation) {
       const summary = summaries.find((entry) => entry.conversationId === routeConversation.conversationId);
       if (summary) {
-        applySelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room, canMessage: summary.canMessage, accessReason: summary.accessReason });
+        applySelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room, canMessage: summary.canMessage, canRestoreFriendship: summary.canRestoreFriendship, accessReason: summary.accessReason });
         return;
       }
       if (routeConversation.type === "room") {
@@ -143,7 +148,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     }
     if (!selected && !isMobileLayout && summaries.length > 0 && routePath === "/app") {
       const first = summaries[0];
-      setSelected({ type: first.type, conversationId: first.conversationId, directUserId: first.directUserId, title: first.title, user: first.user, room: first.room, canMessage: first.canMessage, accessReason: first.accessReason });
+      setSelected({ type: first.type, conversationId: first.conversationId, directUserId: first.directUserId, title: first.title, user: first.user, room: first.room, canMessage: first.canMessage, canRestoreFriendship: first.canRestoreFriendship, accessReason: first.accessReason });
       navigate?.(appRouteForSummary(first), { replace: true });
     }
   }, [currentUser, friends, isMobileLayout, isSettingsRoute, navigate, routeConversation, rooms, routePath, selected, summaries]);
@@ -173,6 +178,7 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
   useEffect(() => {
     setMessageLimit(160);
     lastMarkedReadRef.current = "";
+    setRestoreError("");
   }, [selected?.conversationId, selected?.type]);
 
   const uploadFiles = useCallback(async (files) => {
@@ -246,8 +252,29 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
     setReplyTo(null);
   };
 
+  const restoreSelectedFriendship = async () => {
+    if (!selected || selected.type !== "direct" || !canRestoreFriendship) return;
+    setRestoreBusy(true);
+    setRestoreError("");
+    try {
+      await restoreFriendship({ authToken: token, conversationId: selected.conversationId });
+      setSelected((current) => current?.conversationId === selected.conversationId
+        ? {
+          ...current,
+          canMessage: true,
+          canRestoreFriendship: false,
+          accessReason: undefined,
+        }
+        : current);
+    } catch (err) {
+      setRestoreError(displayError(err, "Could not restore friendship"));
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
   const selectSummary = (summary) => {
-    setSelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room, canMessage: summary.canMessage, accessReason: summary.accessReason });
+    setSelected({ type: summary.type, conversationId: summary.conversationId, directUserId: summary.directUserId, title: summary.title, user: summary.user, room: summary.room, canMessage: summary.canMessage, canRestoreFriendship: summary.canRestoreFriendship, accessReason: summary.accessReason });
     setThreadRoot(null);
     setShowInfo(false);
     navigate?.(appRouteForSummary(summary));
@@ -401,6 +428,10 @@ export function ChatApp({ token, onLogout, routePath = "/app", navigate }) {
                   loading={messagesLoading}
                   canLoadMore={!messagesLoading && messages.length >= messageLimit}
                   lockedReason={directAccessBlocked ? directAccessReason : ""}
+                  lockedActionLabel={canRestoreFriendship ? "Restore friendship" : ""}
+                  lockedActionBusy={restoreBusy}
+                  lockedError={restoreError}
+                  onLockedAction={restoreSelectedFriendship}
                   onLoadMore={() => setMessageLimit((current) => Math.min(current + 80, 600))}
                   searchQuery={messageSearch}
                   matchedMessageIds={matchedMessageIds}

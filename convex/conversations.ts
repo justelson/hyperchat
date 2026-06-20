@@ -8,6 +8,15 @@ import { areFriends, ensureConversationSummary, getRoomById, hydrateRoom, parseD
 const isBlockedBetween = (viewer: any, other: any) =>
   (viewer?.blockedUserIds || []).includes(other?.publicId) || (other?.blockedUserIds || []).includes(viewer?.publicId);
 
+const hasConversationMessages = async (ctx: any, conversationId: string, summary: any) => {
+  if (summary.lastMessage || Number(summary.lastMessageAt || 0) > 0) return true;
+  const message = await ctx.db
+    .query("messages")
+    .withIndex("by_conversation", (q: any) => q.eq("conversationId", conversationId))
+    .first();
+  return Boolean(message);
+};
+
 const hydrateSummary = async (ctx: any, summary: any, viewer: any) => {
   const viewerId = typeof viewer === "string" ? viewer : viewer?.publicId;
   const viewerDoc = typeof viewer === "string" ? await getUserByPublicId(ctx, viewerId) : viewer;
@@ -22,6 +31,8 @@ const hydrateSummary = async (ctx: any, summary: any, viewer: any) => {
     const blocked = isBlockedBetween(viewerDoc, other);
     const friendshipOk = other ? await areFriends(ctx, viewerId, other.publicId) : false;
     const canMessage = Boolean(other && friendshipOk && !blocked);
+    const hasMessageHistory = await hasConversationMessages(ctx, summary.conversationId, summary);
+    const canRestoreFriendship = Boolean(other && !canMessage && !blocked && hasMessageHistory);
     return {
       ...summary,
       _id: summary.conversationId,
@@ -30,11 +41,15 @@ const hydrateSummary = async (ctx: any, summary: any, viewer: any) => {
       directUserId: other?.publicId || otherId,
       user: compactUser(other),
       canMessage,
+      canRestoreFriendship,
+      hasMessageHistory,
       accessReason: canMessage
         ? undefined
         : blocked
           ? "You cannot contact this user"
-          : "Add this person as a friend before messaging",
+          : canRestoreFriendship
+            ? "Restore friendship to continue this chat"
+            : "Add this person as a friend before messaging",
       pinned: Boolean(preference?.pinned),
       muted: Boolean(preference?.muted),
       archived: Boolean(preference?.archived),

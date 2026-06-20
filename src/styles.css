@@ -5193,6 +5193,11 @@ label,
 }
 
 .conversation-lock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px;
   align-self: center;
   max-width: min(420px, 92%);
   border: 1px solid color-mix(in srgb, var(--color-sparkle-primary) 22%, var(--color-sparkle-border));
@@ -5203,6 +5208,27 @@ label,
   text-align: center;
   font-size: 13px;
   font-weight: 700;
+}
+
+.conversation-lock button {
+  min-height: 30px;
+  border-radius: 8px;
+  background: var(--color-sparkle-primary);
+  color: #fff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.conversation-lock button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.conversation-lock small {
+  flex-basis: 100%;
+  color: #dc2626;
+  font-size: 12px;
 }
 
 .load-earlier-button {

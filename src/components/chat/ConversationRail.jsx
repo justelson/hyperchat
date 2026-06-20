@@ -30,7 +30,7 @@ function ConversationItem({ summary, selected, currentUser, presenceById, onSele
   const isLocked = !isRoom && summary.canMessage === false;
   const unread = Number(summary.unreadCount || 0) > 0;
   const lastText = isLocked
-    ? summary.accessReason || "Add this person as a friend before messaging"
+    ? summary.accessReason || (summary.canRestoreFriendship ? "Restore friendship to continue this chat" : "Add this person as a friend before messaging")
     : summary.lastMessage?.text || (summary.isDraft ? "Ready to message" : isRoom ? `${summary.room?.memberCount || 0} members` : "No messages yet");
   const lastPrefix = summary.lastMessage?.senderId === currentUser?.publicId ? "You: " : "";
   const isOnline = !isRoom && presenceById?.get(summary.directUserId)?.isOnline;
@@ -95,6 +95,9 @@ export function ConversationRail({
       title: selected.title || getName(selected.user) || selected.room?.name || "New conversation",
       user: selected.user,
       room: selected.room,
+      canMessage: selected.canMessage,
+      canRestoreFriendship: selected.canRestoreFriendship,
+      accessReason: selected.accessReason,
       updatedAt: Date.now(),
       isDraft: true,
     }, ...base];

@@ -2,7 +2,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { compactUser, makeId, normalizeText } from "./ids";
-import { createNotification } from "./chatHelpers";
+import { createNotification, parseDirectConversation } from "./chatHelpers";
 import { getUserByPublicId, requireUserByToken } from "./authSessions";
 
 const pairKeyFor = (a: string, b: string) => [String(a || ""), String(b || "")].sort().join(":");
@@ -196,6 +196,53 @@ export const respond = mutation({
     });
     if (args.accept) await createNotification(ctx, row.requesterId, viewer.publicId, "friend_accept", {}, {});
     return { ok: true };
+  },
+});
+
+export const restoreFromConversation = mutation({
+  args: { authToken: v.string(), conversationId: v.string() },
+  handler: async (ctx, args) => {
+    const viewer = await requireUserByToken(ctx, args.authToken);
+    const participants = parseDirectConversation(args.conversationId);
+    if (participants.length !== 2 || !participants.includes(viewer.publicId)) {
+      throw new Error("You cannot access this conversation");
+    }
+    const otherId = participants.find((id: string) => id !== viewer.publicId);
+    const other = await getUserByPublicId(ctx, otherId);
+    if (!other) throw new Error("Conversation member no longer exists");
+    if (isBlockedBetween(viewer, other)) throw new Error("You cannot contact this user");
+
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_conversation", (q: any) => q.eq("conversationId", args.conversationId))
+      .first();
+    if (!message) throw new Error("No message history to restore");
+
+    const existing = await getFriendshipByPair(ctx, viewer.publicId, other.publicId);
+    const at = Date.now();
+    if (existing?.status === "accepted") return { ok: true, status: "friend" };
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        requesterId: existing.requesterId || viewer.publicId,
+        recipientId: existing.recipientId || other.publicId,
+        status: "accepted",
+        respondedAt: at,
+        updatedAt: at,
+      });
+    } else {
+      await ctx.db.insert("friendships", {
+        friendshipId: makeId("friend"),
+        pairKey: pairKeyFor(viewer.publicId, other.publicId),
+        requesterId: viewer.publicId,
+        recipientId: other.publicId,
+        status: "accepted",
+        respondedAt: at,
+        createdAt: at,
+        updatedAt: at,
+      });
+    }
+    await createNotification(ctx, other.publicId, viewer.publicId, "friend_accept", {}, {});
+    return { ok: true, status: "friend" };
   },
 });
 

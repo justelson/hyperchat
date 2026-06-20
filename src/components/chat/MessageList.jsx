@@ -37,6 +37,10 @@ export function MessageList({
   onViewReactions,
   typingUsers,
   lockedReason,
+  lockedActionLabel,
+  lockedActionBusy,
+  lockedError,
+  onLockedAction,
 }) {
   const rows = useMemo(() => groupWithDates(messages), [messages]);
   const listRef = useRef(null);
@@ -103,7 +107,17 @@ export function MessageList({
           </button>
         )}
         {loading && <div className="message-loading-row">Loading messages...</div>}
-        {lockedReason && <div className="conversation-lock">{lockedReason}</div>}
+        {lockedReason && (
+          <div className="conversation-lock">
+            <span>{lockedReason}</span>
+            {lockedActionLabel && (
+              <button type="button" disabled={lockedActionBusy} onClick={onLockedAction}>
+                {lockedActionBusy ? "Restoring..." : lockedActionLabel}
+              </button>
+            )}
+            {lockedError && <small>{lockedError}</small>}
+          </div>
+        )}
         {rows.map((row, index) => row.type === "date" ? (
           <div className="date-separator" key={row.id}>{row.label}</div>
         ) : (

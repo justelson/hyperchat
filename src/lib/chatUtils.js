@@ -92,6 +92,8 @@ export const displayError = (err, fallback = "Could not complete that action") =
     "Only admins can reply in this room",
     "File attachments are disabled in this room",
     "Add this person as a friend before messaging",
+    "Restore friendship to continue this chat",
+    "No message history to restore",
     "You can only add friends to a room",
     "You cannot contact this user",
     "Pick one emoji reaction",
