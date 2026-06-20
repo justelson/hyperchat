@@ -765,30 +765,6 @@ select:focus {
   font-size: 12px;
 }
 
-.conversation-preview.locked-preview {
-  justify-content: center;
-  gap: 0;
-  padding-top: 2px;
-  text-align: center;
-}
-
-.rail-lock-status {
-  display: inline-flex;
-  max-width: 100%;
-  min-height: 20px;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-sparkle-primary) 18%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--color-sparkle-primary) 9%, transparent);
-  color: var(--color-sparkle-primary);
-  padding: 2px 7px;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .unread-badge {
   display: grid;
   min-width: 20px;
@@ -5222,8 +5198,9 @@ label,
   justify-content: center;
   flex-wrap: wrap;
   gap: 9px;
-  align-self: center;
+  width: fit-content;
   max-width: min(420px, 92%);
+  margin: 10px auto 0;
   border: 1px solid color-mix(in srgb, var(--color-sparkle-primary) 22%, var(--color-sparkle-border));
   border-radius: 10px;
   background: color-mix(in srgb, var(--color-sparkle-card) 86%, transparent);
