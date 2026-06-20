@@ -1676,15 +1676,16 @@ select:focus {
 }
 
 .avatar-style-controls > div {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
 
 .avatar-style-controls select {
-  min-width: 170px;
-  flex: 1 1 178px;
+  width: 100%;
+  min-width: 0;
+  grid-column: 1 / -1;
 }
 
 .avatar-upload-input {
@@ -1692,6 +1693,8 @@ select:focus {
 }
 
 .avatar-upload-button {
+  grid-column: 2;
+  grid-row: 2;
   width: 34px;
   min-width: 34px;
   padding: 0;
@@ -2284,7 +2287,7 @@ h3,
   overflow: hidden;
   background:
     linear-gradient(180deg, rgba(20, 18, 14, 0.18), rgba(20, 18, 14, 0.72)),
-    url("/wallpapers/optimized/pexels-jplenio-1146708-1920w.webp") center / cover;
+    url("/wallpapers/optimized/pexels-jplenio-1114891-1920w.webp") center / cover;
   padding: 34px;
   color: #fffaf2;
 }
@@ -4452,7 +4455,7 @@ label,
 .auth-side {
   background:
     linear-gradient(180deg, rgba(14, 18, 12, 0.2), rgba(14, 18, 12, 0.74)),
-    url("/wallpapers/optimized/pexels-jplenio-1146708-1920w.webp") center / cover;
+    url("/wallpapers/optimized/pexels-jplenio-1114891-1920w.webp") center / cover;
 }
 
 .auth-side::after {
