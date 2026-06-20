@@ -38,7 +38,7 @@ function ConversationItem({ summary, selected, currentUser, presenceById, onSele
   return (
     <button
       type="button"
-      className={`conversation-item ${selected ? "selected" : ""} ${unread ? "unread" : ""}`}
+      className={`conversation-item ${selected ? "selected" : ""} ${unread ? "unread" : ""} ${isLocked ? "locked" : ""}`}
       onClick={() => onSelect(summary)}
     >
       <Avatar entity={entity} kind={isRoom ? "room" : "user"} online={isOnline} />
@@ -48,10 +48,16 @@ function ConversationItem({ summary, selected, currentUser, presenceById, onSele
           {summary.pinned && <Pin size={12} />}
           <small>{formatTime(summary.lastMessageAt || summary.updatedAt)}</small>
         </span>
-        <span className="conversation-preview">
-          <ConversationTypeBadge type={summary.type} />
-          <span>{lastPrefix}{lastText}</span>
-        </span>
+        {isLocked ? (
+          <span className="conversation-preview locked-preview">
+            <span className="rail-lock-status">{lastText}</span>
+          </span>
+        ) : (
+          <span className="conversation-preview">
+            <ConversationTypeBadge type={summary.type} />
+            <span>{lastPrefix}{lastText}</span>
+          </span>
+        )}
       </span>
       {unread && <span className="unread-badge">{Math.min(Number(summary.unreadCount), 99)}</span>}
     </button>
