@@ -8,7 +8,7 @@ import {
   getUserByPublicId,
   hashPassword,
   issueAuthSession,
-  requireUserByToken,
+  maybeUserByToken,
   revokeAuthSession,
 } from "./authSessions";
 
@@ -38,8 +38,8 @@ export const me = query({
   args: { authToken: v.optional(v.string()) },
   handler: async (ctx, args) => {
     if (!args.authToken) return null;
-    const user = await requireUserByToken(ctx, args.authToken);
-    return compactUser(user);
+    const user = await maybeUserByToken(ctx, args.authToken);
+    return user ? compactUser(user) : null;
   },
 });
 
